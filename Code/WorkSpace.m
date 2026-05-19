@@ -29,7 +29,6 @@ figure('Color','w'); grid on; axis equal;
 view(135,25);
 R.plot(q, ...
     'workspace', WS, ...
-    'jaxes', ...
     'nowrist', ...
     'notiles', ...
     'scale', 0.75, ...
@@ -43,7 +42,7 @@ hold on;
 colores = [0.000, 0.278, 0.671; 0.843, 0.000, 0.251; 0.314, 0.784, 0.471; 1.000, 0.749, 0.000; 0.502, 0.000, 0.502];
 
 % Opcion de Graficar el robot con los sistemas de coordenada
-if false
+if true
     % ----- Grafico de {S_i} -----
     T = R.base;
     for m = 1:R.n
@@ -66,8 +65,8 @@ if false
         end
     end
     
-    % (Opcional) Mostrar el tool como {T}
-    if false
+    % (Optional) Mostrar el tool como {T}
+    if true
         trplot(T * R.tool, 'frame','T', 'length', L);
         title('Frames seleccionados');
     end

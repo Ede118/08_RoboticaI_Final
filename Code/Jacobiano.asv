@@ -1,0 +1,59 @@
+%% Calculo del Jacobiano
+robot
+
+
+d = DH(:, 2)*1000;
+a = DH(:, 3)*1000;
+alpha = DH(:, 4);
+
+
+
+
+% 2. Declaración de variables articulares simbólicas
+syms q1 q2 q3 q4 q5 q6
+q = [q1, q2, q3, q4, q5, q6];
+
+% 3. Inicialización de eslabones y cálculo de matrices acumuladas
+T0_i = cell(1, 6);
+T_acumulada = eye(4);
+
+for s = 1:6
+    % Creamos el eslabón simbólico
+    L = Revolute('d', d(s), 'a', a(s), 'alpha', alpha(s), 'sym');
+    
+    % Extraemos la matriz de transformación homogénea del eslabón (4x4 sym)
+    A_i = L.A(q(s)).double(); 
+    
+    % Calculamos la transformación respecto a la base {0}
+    T_acumulada = T_acumulada * A_i;
+    T0_i{s} = simplify(T_acumulada);
+end
+
+% 4. Extracción del punto del efector final
+T0_6 = T0_i{6};
+p_e = T0_6(1:3, 4); 
+
+% 5. Construcción geométrica de la matriz Jacobiana (6x6 sym)
+J = sym(zeros(6, 6));
+
+for i = 1:6
+    if i == 1
+        % Para la primera articulación, el sistema anterior es la base {0}
+        z_ant = [0; 0; 1];
+        p_ant = [0; 0; 0];
+    else
+        % Para las siguientes, extraemos los datos de T0_{i-1}
+        T_ant = T0_i{i-1};
+        z_ant = T_ant(1:3, 3); % Eje Z del sistema anterior
+        p_ant = T_ant(1:3, 4); % Origen del sistema anterior
+    end
+    
+    % Aplicación de las ecuaciones del Jacobiano Geométrico
+    J(1:3, i) = cross(z_ant, p_e - p_ant); % Submatriz lineal (velocidad lineal)
+    J(4:6, i) = z_ant;                     % Submatriz angular (velocidad angular)
+end
+
+% 6. Simplificación algebraica y conversión a formato LaTeX
+J_simplified = simplify(J);
+latex(J_simplified)
+

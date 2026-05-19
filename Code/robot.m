@@ -5,24 +5,28 @@ clear; clc; close all
 
 %% Definicion de los parametros del robot
 
-% DH = [
-%     0       0.450   0.075    pi/2   0;   % Joint 1
-%     0       0.000   0.640    0      0;   % Joint 2
-%     0       0.000   0.195    pi/2   0;   % Joint 3
-%     0       0.700   0.000    -pi/2  0;   % Joint 4
-%     0       0.000   0.000    -pi/2  0;   % Joint 5
-%     0       0.075   0.000    0      0];  % Joint 6
-% %  theta      d       a     alpha  sigma
-
+% Esta tiene notacion "mas comoda"
+% Es la que esta en el informe
 DH = [
     0       0.450   0.075    pi/2   0;   % Joint 1
     0       0.000   0.640    0      0;   % Joint 2
-    0       0.000   0.195    -pi/2   0;   % Joint 3
-    0       -0.700   0.000   pi/2  0;   % Joint 4
-    0       0.000   0.000    -pi/2  0;   % Joint 5
-    0       0.075   0.000    -pi      0];  % Joint 6
-%  theta      d       a     alpha  sigma
+    0       0.000   0.195    pi/2   0;   % Joint 3
+    0       0.700   0.000    -pi/2  0;   % Joint 4
+    0       0.000   0.000    pi/2  0;   % Joint 5
+    0       0.075   0.000    0      0];  % Joint 6
+% %  theta      d       a     alpha  sigma
 
+% Esta matriz me permite ver mejor el la ETIQUETA DEL
+% EJE q4. Tiene utilidad meramente estetica.
+% DH = [
+%     0       0.450   0.075    pi/2       0;   % Joint 1
+%     0       0.000   0.640    0          0;   % Joint 2
+%     0       0.000   0.195    -pi/2      0;   % Joint 3
+%     0       -0.700   0.000   pi/2       0;   % Joint 4
+%     0       0.000   0.000    -pi/2      0;   % Joint 5
+%     0       0.075   0.000    -pi        0];  % Joint 6
+% %  theta      d       a     alpha  sigma
+% 
 
 name = 'ARC Mate 100iD';
 qlim = deg2rad([ ...
