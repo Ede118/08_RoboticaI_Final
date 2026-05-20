@@ -1,10 +1,11 @@
-%% Calculo del Jacobiano Desacoplado (Muñeca Esférica)
+%% Calculo del Jacobiano
 robot
 
-% 1. Definición de parámetros DH (escalados a mm)
+% 1. Definición de parámetros DH (Ejemplo para los 6 eslabones)
 d = DH(:, 2)*1000;
 a = DH(:, 3)*1000;
 alpha = DH(:, 4);
+
 
 % 2. Declaración de variables articulares simbólicas
 syms q1 q2 q3 q4 q5 q6
@@ -15,57 +16,69 @@ T0_i = cell(1, 6);
 T_acumulada = eye(4);
 
 for s = 1:6
+    % Eslabón simbólico
     L = Revolute('d', d(s), 'a', a(s), 'alpha', alpha(s), 'sym');
+    
+    % Matriz de transformación homogénea del eslabón (4x4 sym)
     A_i = L.A(q(s)).double(); 
+    
+    % Transformación respecto a la base {0}
     T_acumulada = T_acumulada * A_i;
     T0_i{s} = simplify(T_acumulada);
 end
 
-% 4. Extracción del Centro de la Muñeca Esférica (Origen del sistema 3)
+% 4. Extracción del punto del efector final
+T0_6 = T0_i{6};
+p_e = T0_6(1:3, 4); 
+
 T0_3 = T0_i{3};
-p_w = T0_3(1:3, 4); 
+p_w = T0_3(1:3, 4);
 
-% 5. Construcción Geométrica Desacoplada (Evita colgar la PC)
-% Inicializamos los vectores para almacenar los ejes Z y posiciones
-z = sym(zeros(3, 6));
-p = sym(zeros(3, 6));
+% 5. Construcción geométrica de la matriz Jacobiana (6x6 sym)
+J = sym(zeros(6, 6));
 
-% El sistema anterior a la primera articulación es la base {0}
-z(:, 1) = [0; 0; 1];
-p(:, 1) = [0; 0; 0];
-
-% Extraemos los datos para el resto de sistemas acumulados
-for i = 2:6
-    T_ant = T0_i{i-1};
-    z(:, i) = T_ant(1:3, 3); % Ejes Z_0 a Z_5
-    p(:, i) = T_ant(1:3, 4); % Orígenes P_0 a P_5
+for i = 1:6
+    if i == 1
+        % Para la primera articulación, el sistema anterior es la base {0}
+        z_ant = [0; 0; 1];
+        p_ant = [0; 0; 0];
+    else
+        % Para las siguientes, extraemos los datos de T0_{i-1}
+        T_ant = T0_i{i-1};
+        z_ant = T_ant(1:3, 3); % Eje Z del sistema anterior
+        p_ant = T_ant(1:3, 4); % Origen del sistema anterior
+    end
+    
+    % Aplicación de las ecuaciones del Jacobiano Geométrico
+    J(1:3, i) = cross(z_ant, p_w - p_ant); % Submatriz lineal (velocidad lineal)
+    J(4:6, i) = z_ant;                     % Submatriz angular (velocidad angular)
 end
 
-% --- Bloque J11: Velocidad lineal del brazo respecto al centro pw ---
-J11 = [cross(z(:,1), p_w - p(:,1)), ...
-    cross(z(:,2), p_w - p(:,2)), ...
-    cross(z(:,3), p_w - p(:,3))];
-J11 = simplify(J11);
+% 6. Simplificación algebraica y conversión a formato LaTeX
+J_simplified = simplify(J);
 
-% --- Bloque J22: Velocidad angular pura de la muñeca ---
-J22 = [z(:,4), z(:,5), z(:,6)];
-J22 = simplify(J22);
 
-% --- Armado del Jacobiano Geométrico Completo (Estructura Triangular) ---
-% El bloque superior derecho es estrictamente CERO gracias a pw
-J21 = [z(:,1), z(:,2), z(:,3)]; 
-J21 = simplify(J21);
+J11 = J(1:3, 1:3);
+J12 = J(1:3, 4:6);
+J21 = J(4:6, 1:3);
+J22 = J(4:6, 4:6);
 
-J_geometrico_w = [J11,             sym(zeros(3,3)); 
-    J21,             J22];
+detJ11 = det(J11);
+detJ12 = det(J21);
+detJ21 = det(J21);
+detJ22 = det(J22);
 
-% 6. Cálculo e Impresión de determinantes independientes
-det_Brazo  = simplify(det(J11), 'Steps', 30);
-det_Muneca = simplify(det(J22), 'Steps', 30);
+detJ11_Simplified = simplify(detJ11, 'Steps', 50);
+detJ11_Simplified = simplify(detJ11_Simplified, 'Steps', 50);
+detJ12_Simplified = simplify(detJ12);
+detJ21_Simplified = simplify(detJ21);
+detJ22_Simplified = simplify(detJ22);
 
-fprintf('================ LaTeX Formulas ================\n\n')
-fprintf('Jacobiano Geometrico Completo (en pw):\n%s\n\n', latex(J_geometrico_w))
-fprintf('Matriz J11 (Brazo):\n%s\n\n', latex(J11))
-fprintf('Matriz J22 (Muñeca):\n%s\n\n', latex(J22))
-fprintf('Determinante del Brazo (Singularidades del Brazo):\n%s\n\n', latex(det_Brazo))
-fprintf('Determinante de la Muñeca (Singularidades de la Muñeca):\n%s\n\n', latex(det_Muneca))
+fprintf('================ LaTeX Formula ================\n\n')
+fprintf('Geometric Jacobian:\n%s\n\n', latex(J_simplified))
+fprintf('Det J11:\n%s\n\n', latex(detJ11_Simplified))
+fprintf('Det J12:\n%s\n\n', latex(detJ12_Simplified))
+fprintf('Det J21:\n%s\n\n', latex(detJ21_Simplified))
+fprintf('Det J22:\n%s\n\n', latex(detJ22_Simplified))
+
+

@@ -53,21 +53,38 @@ J_analitico = jacobian(x_a, q);
 fprintf('================ Simplify Start ================\n\n')
 
 % 8. Simplificación algebraica final y conversión a formato LaTeX
-J_analitico_simplificado = simplify(J_analitico);
+J = simplify(J_analitico);
 
 % 9. Cálculo del determinante del Jacobiano Analítico
-det_J = det(J_analitico_simplificado);
+
+detJ11 = det(J(1:3, 1:3));
+detJ12 = det(J(1:3, 4:6));
+detJ21 = det(J(4:6, 1:3));
+detJ22 = det(J(4:6, 4:6));
+
 
 % 10. Simplificación algebraica profunda del determinante
 % Nota: 'Steps', 50 fuerza a MATLAB a realizar más pasadas de simplificación
-det_J_simplificado = simplify(det_J, 'Steps', 50);
+detJ11s = simplify(detJ11, 'Steps', 50);
+detJ12s = simplify(detJ12, 'Steps', 50);
+detJ21s = simplify(detJ21, 'Steps', 50);
+detJ22s = simplify(detJ22, 'Steps', 50);
+
+detJ = detJ11s*detJ22s - detJ12s*detJ21s;
+detJs = simplify(detJ, 'Steps', 50);
 
 % 11. Conversión del determinante a formato LaTeX para el informe
 
 
 fprintf('================ LaTeX Formula ================\n\n')
-fprintf('Analitic Jacobian:\n%s\n\n', latex(J_analitico_simplificado))
-fprintf('Det J:\n%s\n\n', latex(det_J_simplificado))
+fprintf('Analitic Jacobian:\n%s\n\n', latex(J))
+
+fprintf('Det J11:\n%s\n\n', latex(detJ11s))
+fprintf('Det J22:\n%s\n\n', latex(detJ22s))
+fprintf('Det J12:\n%s\n\n', latex(detJ12s))
+fprintf('Det J21:\n%s\n\n', latex(detJ21s))
+
+fprintf('Det J:\n%s\n\n', latex(detJs))
 
 % =========================================================================
 % Exportación del resultado a un archivo de texto (Modo seguro para toda la noche)
@@ -86,7 +103,7 @@ fid = fopen('Ja.txt', 'w');
 if fid == -1
     error('No se pudo crear o abrir el archivo Ja.txt. Revisa los permisos de la carpeta.');
 end
-fprintf(fid, '%s', latex(J_analitico_simplificado));
+fprintf(fid, '%s', latex(J));
 fclose(fid);
 
 
