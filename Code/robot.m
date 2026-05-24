@@ -30,12 +30,12 @@ DH = [
 
 name = 'ARC Mate 100iD';
 qlim = deg2rad([ ...
-   -170  170;       % q1
-    80  -140;       % q2
-   -170  170;       % q3
-   -180  180;       % q4
-   -120  120;       % q5
-   -360  360]);     % q6
+   -170     170;       % q1
+   -117.5   117.5;     % q2
+   -170     170;       % q3
+   -190     190;       % q4
+   -180     180;       % q5
+   -450     450]);     % q6
 
 
 offset = deg2rad([
@@ -43,7 +43,7 @@ offset = deg2rad([
     75; 
     25; 
     0; 
-    180; 
+    0; 
     0]);
 
 base = transl(0,0,0);
@@ -57,3 +57,4 @@ R.qlim = qlim;
 R.offset = offset;
 R.base = base;
 R.tool = tool;
+

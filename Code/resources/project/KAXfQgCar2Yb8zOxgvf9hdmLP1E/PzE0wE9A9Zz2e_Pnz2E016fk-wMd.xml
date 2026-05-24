@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Info File="Toolbox/rvctools/startup_rvc.m" GroupUUID="default" Icon="" Name="startup_rvc" Type="StartUp" Visible="0">
-    <Extension Name="StartUpPrev" Value="HEAD"/>
-</Info>

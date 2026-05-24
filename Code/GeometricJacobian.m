@@ -76,9 +76,12 @@ detJ22_Simplified = simplify(detJ22);
 
 fprintf('================ LaTeX Formula ================\n\n')
 fprintf('Geometric Jacobian:\n%s\n\n', latex(J_simplified))
+fprintf('J11:\n%s\n\n', latex(J11))
 fprintf('Det J11:\n%s\n\n', latex(detJ11_Simplified))
+fprintf('J22:\n%s\n\n', latex(J22))
+fprintf('Det J22:\n%s\n\n', latex(detJ22_Simplified))
 fprintf('Det J12:\n%s\n\n', latex(detJ12_Simplified))
 fprintf('Det J21:\n%s\n\n', latex(detJ21_Simplified))
-fprintf('Det J22:\n%s\n\n', latex(detJ22_Simplified))
+
 
 

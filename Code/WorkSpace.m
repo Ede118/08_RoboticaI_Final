@@ -1,7 +1,7 @@
 %% Requiere Robotics Toolbox for MATLAB (Peter Corke)
 % https://petercorke.com/toolboxes/robotics-toolbox/
 
-clear; clc; close all;
+%clear; clc; close all;
 robot
 
 %% Definicion del WorkSpace
@@ -16,14 +16,8 @@ WS = [x1lim x2lim y1lim y2lim z1lim z2lim];
 
 
 %% Mostrar sistemas de referencia {S_i}
-
-
 q = zeros(1, R.n);
-show_axis = ones(1, R.n+1);
 L = 0.35;
-
-disp(['Dim R.n: ', num2str(R.n)]);
-disp(['Dim show_axis: ', num2str(show_axis)]);
 
 figure('Color','w'); grid on; axis equal;
 view(135,25);
@@ -42,7 +36,7 @@ hold on;
 colores = [0.000, 0.278, 0.671; 0.843, 0.000, 0.251; 0.314, 0.784, 0.471; 1.000, 0.749, 0.000; 0.502, 0.000, 0.502];
 
 % Opcion de Graficar el robot con los sistemas de coordenada
-if true
+if false
     % ----- Grafico de {S_i} -----
     T = R.base;
     for m = 1:R.n
