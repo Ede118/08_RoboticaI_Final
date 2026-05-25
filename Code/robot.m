@@ -47,8 +47,8 @@ offset = deg2rad([
     0]);
 
 base = transl(0,0,0);
-d_tool = 0.016; 
-tool = transl(d_tool,0,0);
+d_tool = 0; 
+tool = transl(0,0,d_tool);
 
 %% Definicion del robot
 R = SerialLink(DH);
