@@ -2,7 +2,7 @@
 % https://petercorke.com/toolboxes/robotics-toolbox/
 
 %clear; clc; close all;
-my_robot;
+robot
 
 %% Definicion del WorkSpace
 x1lim = -2;

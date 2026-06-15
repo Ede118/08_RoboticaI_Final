@@ -1,7 +1,7 @@
 % Requiere Robotics Toolbox for MATLAB (Peter Corke)
 % https://petercorke.com/toolboxes/robotics-toolbox/
 
-clc; close all;
+clear; clc; close all
 
 %% Definicion de los parametros del robot
 

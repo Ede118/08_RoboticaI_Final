@@ -1,7 +1,5 @@
 %% Calculo del Jacobiano
-clc;
-
-my_robot; Robot.display;
+robot
 
 % 1. Definición de parámetros DH (Ejemplo para los 6 eslabones)
 d = DH(:, 2)*1000;
@@ -33,8 +31,8 @@ end
 T0_6 = T0_i{6};
 p_e = T0_6(1:3, 4); 
 
-T0_4 = T0_i{4};
-p_w = T0_4(1:3, 4);
+T0_3 = T0_i{3};
+p_w = T0_3(1:3, 4);
 
 % 5. Construcción geométrica de la matriz Jacobiana (6x6 sym)
 J = sym(zeros(6, 6));
@@ -66,7 +64,7 @@ J21 = J(4:6, 1:3);
 J22 = J(4:6, 4:6);
 
 detJ11 = det(J11);
-detJ12 = det(J12);
+detJ12 = det(J21);
 detJ21 = det(J21);
 detJ22 = det(J22);
 

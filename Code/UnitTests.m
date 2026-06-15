@@ -1,0 +1,131 @@
+%% SCRIPT DE VALIDACIÓN: CINEMÁTICA INVERSA
+clear; clc; close all;
+
+% 1. Cargar el robot (Asegúrate de que 'my_robot' define la variable 'Robot')
+my_robot; 
+
+fprintf('Iniciando Test de Cinemática Inversa...\n\n');
+
+%% =========================================================================
+% TEST 1: PUNTOS ALEATORIOS DENTRO DEL ESPACIO DE TRABAJO
+% =========================================================================
+fprintf('--- TEST 1: 100 Puntos Aleatorios ---\n');
+N_test = 100;
+q_test_rand = zeros(N_test, 6);
+
+% Generar ángulos aleatorios respetando los límites articulares
+for j = 1:6
+    q_min = Robot.links(j).qlim(1);
+    q_max = Robot.links(j).qlim(2);
+    q_test_rand(:, j) = q_min + (q_max - q_min) * rand(N_test, 1);
+end
+
+% Construir el vector_p de entrada
+vector_p_rand = zeros(N_test, 6);
+Target_poses = Robot.fkine(q_test_rand);
+
+for k = 1:N_test
+    vector_p_rand(k, 1:3) = Target_poses(k).t';
+    % Extraemos Roll, Pitch, Yaw en convención ZYX
+    vector_p_rand(k, 4:6) = Target_poses(k).tr2rpy('zyx'); 
+end
+
+% Probar la función
+tic;
+Q_calc_rand = CinematicaInversa(Robot, vector_p_rand);
+tiempo_ejecucion = toc;
+
+% Evaluar Error Cartesiano
+error_pos_max = 0;
+for k = 1:N_test
+    T_calc = Robot.fkine(Q_calc_rand(k, :));
+    e_pos = norm(Target_poses(k).t - T_calc.t) * 1000; % En milímetros
+    if e_pos > error_pos_max
+        error_pos_max = e_pos;
+    end
+end
+
+fprintf('Tiempo de cálculo para %d puntos: %.4f segundos.\n', N_test, tiempo_ejecucion);
+fprintf('Error máximo de posición: %g mm\n', error_pos_max);
+if error_pos_max < 1e-6
+    fprintf('Resultado: EXCELENTE (Error atribuible a precisión de máquina).\n\n');
+else
+    fprintf('Resultado: FALLÓ (Revisar ecuaciones).\n\n');
+end
+
+
+%% =========================================================================
+% TEST 2: EL LÍMITE DEL ESPACIO DE TRABAJO (SINGULARIDAD DE BORDE)
+% =========================================================================
+fprintf('--- TEST 2: Brazo completamente estirado ---\n');
+% Ponemos q2 y q3 en cero (o el valor que estire el brazo al máximo)
+q_estirado = [0, 0, 0, 0, 0, 0]; 
+
+T_estirado = Robot.fkine(q_estirado);
+v_estirado = [T_estirado.t', T_estirado.tr2rpy('zyx')];
+
+Q_calc_estirado = CinematicaInversa(Robot, v_estirado);
+T_calc_estirado = Robot.fkine(Q_calc_estirado(1, :));
+
+e_pos_estirado = norm(T_estirado.t - T_calc_estirado.t) * 1000;
+fprintf('Error de posición al límite: %g mm\n\n', e_pos_estirado);
+
+
+%% =========================================================================
+% TEST 3: FUERA DEL ESPACIO DE TRABAJO (ROBUSTEZ)
+% =========================================================================
+fprintf('--- TEST 3: Coordenada Inalcanzable ---\n');
+% Pedimos un punto a 10 metros de distancia (imposible para este robot)
+vector_p_imposible = [10, 10, 10, 0, 0, 0]; 
+
+try
+    Q_imposible = CinematicaInversa(Robot, vector_p_imposible);
+    % Si la función no se detiene, comprobamos si devolvió NaNs o Ceros.
+    disp('La función se ejecutó. Verificando manejo de error silencioso...');
+    % Nota: Según tu código, debería saltar el error del 'all(Q(1,:)==0)'
+catch ME
+    fprintf('La función detectó correctamente el error y se detuvo.\n');
+    fprintf('Mensaje de tu función: "%s"\n', ME.message);
+    fprintf('Resultado: EXCELENTE (Manejo de excepciones robusto).\n');
+end
+
+
+% % Carga el objeto 'Robot'
+% my_robot; 
+% 
+% % q = [15 15 -29.3 -30.6 49.7 166]
+% pos = [-0.245, 0.804, 1.278];
+% rot = deg2rad([66.369, -33.670, -43.289]);
+% x = [pos, rot];
+% 
+% % IK propia
+% [Q] = CinematicaInversa(Robot, x);
+% 
+% q = squeeze(Q(1, :, 1));
+% 
+% if any(isnan(q))
+%     error('La solución 1 dio NaN. El punto está fuera de alcance o en singularidad.');
+% end
+% 
+% %% Graficación
+% x1lim = -2; x2lim = 2;
+% y1lim = -2; y2lim = 2;
+% z1lim = -0.1; z2lim = 2;
+% WS = [x1lim, x2lim, y1lim, y2lim, z1lim, z2lim];
+% 
+% figure('Color', 'w', 'Name', 'Postura del Robot');
+% 
+% Robot.plot(q, ...
+%     'workspace', WS, ...
+%     'notiles', ...
+%     'scale', 0.75, ...
+%     'jointdiam', 1.5, ...
+%     'jointlen', 1, ...
+%     'linkcolor', [.2 .2 .2], ...
+%     'jointcolor', [1 .4 0]);
+% Robot.teach(q);
+% 
+% hold on;
+% grid on; grid minor; 
+% % axis equal;
+% view(135, 25);
