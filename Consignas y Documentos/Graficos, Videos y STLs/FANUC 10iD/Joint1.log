@@ -1,0 +1,28 @@
+Conversión de Solid Edge en STL
+Fecha: martes,junio 16,2026 12:43a. m.
+Archivo fuente:C:\Users\admin\Documents\GitHub\08_RoboticaI_Final\Graficos, Videos y STLs\FANUC 10iD\GeoContainer.par
+Sistema fuente: SOLID EDGE
+
+Hardware:
+Procesador: AMD Ryzen 5 5600G with Radeon Graphics         
+Sistema operativo: Windows 10 Professional
+Memoria instalada: 27,89 GB
+
+Información sobre el software:
+Versión de Parasolid: 38.0.150
+Versión de PSBodyShop: 38.0.111
+Versión del adaptador STL: 1700.0.0
+Versión de Solid Edge: 226.00.01.004 x64
+
+Opciones de exportación de STL:
+Formato de la carpeta de salida:BINARY
+Exportar las piezas visualizadas: Desactivado
+Opción estructural: Monolithic
+Unidades de exportación: Inch
+Valor de la tolerancia de exportación:0,050000
+Tipo de tolerancia de exportación: Custom
+Valor del ángulo plano de superficie de exportación:0,523599
+
+Avance en la conversión:
+Se completó el proceso de conversión
+Tiempo necesario para convertir:00 : 00 : 00
