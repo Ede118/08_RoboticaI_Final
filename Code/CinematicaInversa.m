@@ -1,181 +1,213 @@
-function [q] = CinematicaInversa(R, vector_p)
-    % CINEMATICAINVERSA Calcula las 8 soluciones articulares (q) para un robot.
-    arguments (Input)
-        R           % Estructura o modelo del robot (contiene d, a, alpha, etc.)
-        vector_p    % Vector de pose deseada (6xK) [x, y, z, roll, pitch, yaw]
-    end
-    arguments (Output)
-        q           % Matriz de 6x8 con las 8 posibles configuraciones articulares
-    end
-    
-    if size(vector_p, 1) ~= 6
-        disp('Error: size(vector_p) no tiene 6 filas.')        
-        return
-    end
-    
-    T_target = x2T(vector_p); 
-    
-    if isa(R.tool, 'SE3')
-        T_tool = R.tool.T;
-    else
-        T_tool = R.tool;
-    end
-    
-    T06 = T_target / T_tool; 
-    
-    p_w = T06(1:3, 4) - T06(1:3, 3) * R.d(6); % (3,1)
-    
-    q = zeros(6,8);
-    
-    %% 1. Soluciones para q1 (Hombro)
-    if (p_w(1) == 0) && (p_w(2) == 0)
-        disp('Advertencia: Punto sobre el eje Z0 (Singularidad)')
-    end
-    
-    q1_front = atan2(p_w(2), p_w(1));
-    q1_back  = wrapToPi(q1_front + pi);
-    
-    q(1, 1:4) = q1_front;
-    q(1, 5:8) = q1_back;
-    
-    %% Despeje de variables intermedias para q2 y q3
-    A1 = A_DH(q(1,1), R.d(1), R.a(1), R.alpha(1));
-    Rot1 = A1(1:3, 1:3);
-    v1 = A1(1:3, 4);
-    
-    T01 = rt2tr(Rot1, v1);
-    
-    % Distancia desde el origen de la articulación 2 hasta el centro de la muñeca
-    dif = p_w - T01(1:3, 4);
-    
-    
-    % Se proyecta el vector en el plano de elevación (Articulaciones 2 y 3)
-    distancia_radial = norm(dif(1:2)); % Cuánto se aleja horizontalmente
-    distancia_vertical = dif(3);       % Cuánto sube o baja verticalmente
-    
-    % vec_r ahora es un vector [2x1] en el plano local del brazo
-    vec_r = [distancia_radial; distancia_vertical];
-    
-    % Ahora 'r' sí representa la hipotenusa 3D real desde el hombro a la muñeca
-    r = norm(vec_r); 
-    
-    H2 = R.a(3)^2 + R.d(4)^2;
-    H = sqrt(H2);
-    
-    
-    beta    = Tcoseno_a(R.a(2), r, H);
-    gamma   = Tcoseno_a(R.a(2), H, r);
+function [Q] = CinematicaInversa(R, vector_p, q0)
+% CINEMATICAINVERSA Calcula las 8 soluciones articulares (q) para un robot.
+% arguments (Input)
+%    R          % Estructura o modelo del robot (contiene d, a, alpha, etc.)
+%    vector_p   % Vector de pose deseada (Nx6) [x, y, z, roll, pitch, yaw]
+% end
+% arguments (Output)
+%    Q          % Matriz de Nx6x8 con las 8 posibles configuraciones articulares
+% end
 
-    %% Para 1ra y 2da solución de q1 (Codo arriba / Codo abajo)
-    q(2, 1:2) = atan2(vec_r(2), vec_r(1)) + beta;
-    q(3, 1) = pi - gamma;
-    q(3, 2) = -pi + gamma;
-    q(2, 3:4) = atan2(vec_r(2), vec_r(1)) - beta;
-    q(3, 3) = pi - gamma;
-    q(3, 4) = -pi + gamma;
+if size(vector_p, 2) ~= 6
+    error('Vector de coordenadas cartesianas debe ser de dimensiones Nx6 [x,y,z,R,P,Y]');
+end
+
+if nargin < 3
+    q0 = zeros(1, 6);
+end
+
+N = size(vector_p, 1);
+
+T_tool = R.tool;
+a1 = R.links(1).a; 
+a2 = R.links(2).a; 
+a3 = R.links(3).a; 
+
+d1 = R.links(1).d; 
+d4 = R.links(4).d; 
+d6 = R.links(6).d; 
+
+L1 = a2; 
+L2 = sqrt(a3^2 + d4^2);
+phi = atan2(d4, a3);
+
+% OffSets
+offs = zeros(1, 6);
+for i = 1:6
+    offs(i) = R.links(i).offset;
+end
+
+
+% Pre-alojamiento de memoria (Matriz 3D inicializada en NaN)
+QSol = NaN(N, 6, 8);
+
+% Sub-robot para la cinemática de los primeros 3 eslabones
+aux_robot = SerialLink(R.links(1:3));
+
+% 4 posturas del brazo:
+    % 1: Frente-Arriba 
+    % 2: Frente-Abajo 
+    % 3: Atrás-Arriba 
+    % 4: Atrás-Abajo
+
+map_q1  = [1, 1, 2, 2]; 
+map_q23 = [1, 2, 3, 4]; 
+
+%% CICLO PRINCIPAL
+for k = 1:N
+
+    % Pose Objetivo (Convención ZYX)
+    Target_Pose = SE3(vector_p(k, 1:3)) * SE3.rpy(vector_p(k, 4:6), 'zyx');
+    T06_temp = Target_Pose / T_tool; 
     
-    q(2, 5:6) = atan2(vec_r(2), vec_r(1)) + beta;
-    q(3, 5) = pi - gamma;
-    q(3, 6) = -pi + gamma;
-    q(2, 7:8) = atan2(vec_r(2), vec_r(1)) - beta;
-    q(3, 7) = pi - gamma;
-    q(3, 8) = -pi + gamma;
+    % ——————————————————————————————————————— %
+    %                   q1                    %
+    % ——————————————————————————————————————— %
     
-    %% Despeje de la Muñeca Esférica (q4, q5, q6)
-    for i = 1:8
-        A01 = A_DH(q(1,i), R.d(1), R.a(1), R.alpha(1));
-        A12 = A_DH(q(2,i), R.d(2), R.a(2), R.alpha(2));
-        A23 = A_DH(q(3,i), R.d(3), R.a(3), R.alpha(3));
+    pos_tcp = T06_temp.t;
+    a_tcp   = T06_temp.a;
+
+    p_w = (pos_tcp - a_tcp * d6)';
+    px = p_w(1); py = p_w(2); pz = p_w(3);
+
+    if norm(p_w(1:2)) < 1e-6
+        warning('Punto %d sobre el eje Z0 (Singularidad de Hombro)', k);
+    end
+
+    % Variables temporales, se reinician en cada iteración
+    q1_tmp = [atan2(py, px), atan2(-py, -px)];
+    q2_tmp = NaN(1, 4);
+    q3_tmp = NaN(1, 4);
+    
         
-        T03 = A01 * A12 * A23;
-        R03T = T03(1:3, 1:3)'; % Transpuesta de la rotación (inversa)
+    
+    % ——————————————————————————————————————— %
+    %      Muñeca y Guardado (Las 8 Sol.)     %
+    % ——————————————————————————————————————— %
+    
+    for rama = 1:4
+        idx_1  = map_q1(rama);
+        idx_23 = map_q23(rama);
+
+        % Solo calculamos la muñeca si el brazo alcanzó la posición
+        if ~isnan(q2_tmp(idx_23)) 
+            
+            
+            q_brazo = [q1_tmp(idx_1), q2_tmp(idx_23), q3_tmp(idx_23)];
+            q_brazo_real = q_brazo - offs(1:3); 
+            
+            % Cinemática directa parcial 
+            T03_temp = aux_robot.fkine(q_brazo_real);
+            R03 = T03_temp.R; 
+            R06 = T06_temp.R;
+            
+            r_mat = R03' * R06;
+
+            % --- Solución 1: Wrist Up (No-Flip) ---
+            q5_up = atan2(norm([r_mat(1, 3), r_mat(2, 3)]), r_mat(3, 3));
+            q4_up = atan2(r_mat(2, 3), r_mat(1, 3));
+            q6_up = atan2(r_mat(3, 2), -r_mat(3, 1));
+            
+            % Guardar vector completo de 6 juntas en la capa impar (1, 3, 5, 7)
+            col_WristUp = 2*rama - 1; 
+            QSol(k, :, col_WristUp) = [q_brazo, q4_up, q5_up, q6_up];
+
+            % --- Solución 2: Wrist Down (Flip) ---
+            q5_down = atan2(-norm([r_mat(1, 3), r_mat(2, 3)]), r_mat(3, 3));
+            q4_down = atan2(-r_mat(2, 3), -r_mat(1, 3)); 
+            q6_down = atan2(-r_mat(3, 2), r_mat(3, 1)); 
+
+            % Guardar vector completo de 6 juntas en la capa par (2, 4, 6, 8)
+            col_WristDown = 2*rama;
+            QSol(k, :, col_WristDown) = [q_brazo, q4_down, q5_down, q6_down];
+        end
+    end
+end
+
+%%
+% —————————————————————————————————————————————————————— %
+% 1. APLICACIÓN DE OFFSETS Y WRAP (Vectorizado)
+% —————————————————————————————————————————————————————— %
+
+offs_3d = reshape(offs, 1, 6, 1);
+QSol = wrapToPi(QSol - offs_3d);
+
+%%
+% —————————————————————————————————————————————————————— %
+% 2. FILTRADO POR LÍMITES ARTICULARES (Vectorizado)
+% —————————————————————————————————————————————————————— %
+
+for joint = 1:6
+    q_min = R.links(joint).qlim(1);
+    q_max = R.links(joint).qlim(2);
+    
+    % Posturas que violan los limites
+    mascara_invalida = QSol(:, joint, :) < q_min | QSol(:, joint, :) > q_max;
+    
+    % Si una articulación falla, invalidamos la fila entera (las 6 juntas)
+    mascara_completa = repmat(mascara_invalida, 1, 6, 1);
+    QSol(mascara_completa) = NaN;
+end
+
+%%
+% —————————————————————————————————————————————————————— %
+% 3. SELECCIÓN DE LA SOLUCIÓN ÓPTIMA (Shortest Path)
+% —————————————————————————————————————————————————————— %
+
+Q = zeros(N, 6); 
+
+% -- Evaluación del Punto Inicial (k = 1) --
+dist_min = inf;
+mejor_sol_inicial = 0;
+
+for sol = 1:8
+    q_candidato = QSol(1, :, sol);
+    
+    if ~any(isnan(q_candidato)) 
+        % Distancia en el espacio articular respecto a la postura inicial
+        distancia = norm(wrapToPi(q_candidato - q0));
         
-        Rot36 = R03T * T06(1:3, 1:3);
+        if distancia < dist_min
+            dist_min = distancia;
+            mejor_sol_inicial = sol;
+        end
+    end
+end
+
+if mejor_sol_inicial == 0
+    error('El punto inicial es inalcanzable. Revisa el espacio de trabajo o los límites articulares.');
+end
+
+Q(1, :) = QSol(1, :, mejor_sol_inicial);
+
+% -- Rastreo Continuo para el resto de la trayectoria (k = 2:N) --
+for k = 2:N
+    q_previo = Q(k-1, :);
+    dist_min = inf;
+    mejor_sol = 0; 
+
+    for sol = 1:8
+        q_candidato = QSol(k, :, sol);
         
-        q(4,i) = atan2(Rot36(2,3), Rot36(1,3));
-        
-        if mod(i, 2) ~= 0
-            q(5,i) = atan2(sqrt(Rot36(1,3)^2 + Rot36(2,3)^2), Rot36(3,3));
-        else
-            q(5,i) = atan2(-sqrt(Rot36(1,3)^2 + Rot36(2,3)^2), Rot36(3,3));
+        if any(isnan(q_candidato))
+            continue;
         end
         
-        q(6,i) = atan2(-Rot36(3,2), Rot36(3,1));
+        % Minimizamos el salto articular para asegurar continuidad
+        dist = norm(wrapToPi(q_candidato - q_previo)); 
+        
+        if dist < dist_min
+            dist_min = dist;
+            mejor_sol = sol;
+        end
     end
     
-    % Envolver ángulos entre -pi y pi
-    q = wrapToPi(q);
-    
-    if isfield(R, 'offset')
-        robot_offset = R.offset;
+    if mejor_sol == 0
+        warning('El punto %d es inalcanzable. El robot se detendrá en la postura anterior.', k);
+        Q(k, :) = q_previo; 
     else
-        robot_offset = zeros(1, 6); % Valor por defecto si no existe offset
+        Q(k, :) = QSol(k, :, mejor_sol);
     end
-    
-    robot_offset = R.offset'
-
-
-    for s = 1:6
-        q(s, :) = q(s, :) - robot_offset(s) * ones(1, 8);
-    end
-    
-    q = wrapToPi(q);
 end
 
-%% Subfunciones Auxiliares
-
-function [T] = A_DH(theta, d, a, alpha)
-    T = [cos(theta), -sin(theta)*cos(alpha),  sin(theta)*sin(alpha), a*cos(theta);
-         sin(theta),  cos(theta)*cos(alpha), -cos(theta)*sin(alpha), a*sin(theta);
-         0,           sin(alpha),             cos(alpha),            d;
-         0,           0,                      0,                     1];
-end
-
-function [T] = x2T(x)
-    % Convierte un vector de pose (6x1) en una matriz de transformación (4x4)
-    if size(x,1) ~= 6
-        disp('Advertencia: x debe ser de 6 filas')
-    end
-    
-    pos = x(1:3, :);
-    Rot = rpy2r(x(4:6, :)', 'xyz'); 
-    
-    T = rt2tr(Rot, pos);
-end
-
-function angulo_rad = Tcoseno_a(lado_a, lado_b, lado_opuesto)
-    % TEOREMA_COSENO_ANGULO Calcula el ángulo opuesto al 'lado_opuesto'.
-    % Entradas:
-    %   lado_a, lado_b : Longitudes de los lados adyacentes al ángulo a buscar.
-    %   lado_opuesto   : Longitud del lado opuesto al ángulo a buscar.
-    % Salidas:
-    %   angulo_rad     : Ángulo resultante en radianes.
-    
-    numerador = lado_a^2 + lado_b^2 - lado_opuesto^2;
-    denominador = 2 * lado_a * lado_b;
-    
-    coseno_angulo = numerador / denominador;
-    
-    if coseno_angulo > 1
-        coseno_angulo = 1;
-    elseif coseno_angulo < -1
-        coseno_angulo = -1;
-    end
-    
-    angulo_rad = acos(coseno_angulo);
-end
-
-function lado_resultante = Tcoseno_l(lado_a, lado_b, angulo_rad)
-    % TEOREMA_COSENO_LADO Calcula un lado desconociendo dado el ángulo opuesto.
-    % Entradas:
-    %   lado_a, lado_b : Longitudes de los lados conocidos.
-    %   angulo_rad     : Ángulo entre lado_a y lado_b (en radianes).
-    % Salidas:
-    %   lado_resultante: Longitud del lado opuesto al ángulo dado.
-    
-    % Fórmula: c^2 = a^2 + b^2 - 2ab*cos(gamma)
-    lado_cuadrado = lado_a^2 + lado_b^2 - (2 * lado_a * lado_b * cos(angulo_rad));
-    
-    % Se extrae la raíz cuadrada para obtener la magnitud real
-    lado_resultante = sqrt(lado_cuadrado);
 end

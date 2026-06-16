@@ -1,0 +1,176 @@
+function [Q] = CinematicaInversa(R, vector_p)
+    % CINEMATICAINVERSA Calcula las 8 soluciones articulares (q) para un robot.
+    arguments (Input)
+        R           % Estructura o modelo del robot (contiene d, a, alpha, etc.)
+        vector_p    % Vector de pose deseada (6xK) [x, y, z, roll, pitch, yaw]
+    end
+    arguments (Output)
+        Q           % Matriz de 6x8 con las 8 posibles configuraciones articulares
+    end
+    
+    if size(vector_p, 1) ~= 6
+        disp('Error: size(vector_p) no tiene 6 filas.')        
+        return
+    end
+    
+    T_target = x2T(vector_p); 
+    hat = R.offset';
+    Q = zeros(6,8);
+
+    if isa(R.tool, 'SE3')
+        T_tool = R.tool.T;
+    else
+        T_tool = R.tool;
+    end
+    
+    T06 = T_target / T_tool; 
+    p_w = T06(1:3, 4) - T06(1:3,3)*R.d(6);
+    
+    
+    %% 1. Soluciones para q1 (Hombro)
+    if (p_w(1) == 0) && (p_w(2) == 0)
+        disp('Advertencia: Punto sobre el eje Z0 (Singularidad)')
+    end
+    
+    q11 = atan2(p_w(2), p_w(1)) - hat(1);
+    q12  = wrapToPi(q11 + pi);
+    
+    Q(1, 1:4) = q11;
+    Q(1, 5:8) = q12;
+
+    
+    
+    %% q2 y q3 en base a q11
+    T01 = R.links(1).A(Q(1,1)); 
+    if isa(T01, 'SE3')
+        T01 = T01.T; 
+    end
+
+    O1 = T01(1:3, 4);
+    
+    % 1. Extraer la submatriz de rotación 3x3 de T01 y calcular vector
+    R01 = T01(1:3, 1:3); 
+    p14_base = p_w - O1; 
+    p14_local = R01' * p14_base;
+    
+    
+    distancia_radial = p14_local(1); 
+    distancia_vertical = p14_local(2);       
+    
+    vec_r = [distancia_radial; distancia_vertical];
+    r = norm(vec_r); 
+    
+    H = sqrt(R.a(3)^2 + R.d(4)^2);
+    
+    
+    beta    = Tcoseno_a(R.a(2), r, H);
+    gamma   = Tcoseno_a(R.a(2), H, r);
+    
+    % --- CORRECCIÓN: Ángulo de la estructura en L del eslabón 3 ---
+    phi = atan2(R.d(4), R.a(3));
+    
+    
+    % CODO ARRIBA
+    Q(2, 1:2) = ( atan2(vec_r(2), vec_r(1)) + beta ) - R.offset(2);
+    Q(3, 1:2) = ( -pi + gamma + phi ) - R.offset(3);
+    
+    % CODO ABAJO
+    Q(2, 3:4) = ( atan2(vec_r(2), vec_r(1)) - beta ) - R.offset(2);
+    Q(3, 3:4) = ( pi - gamma + phi ) - R.offset(3);
+    
+    %% q2 y q3 en base a q12
+    T01 = R.links(1).A(Q(1,5)); 
+    if isa(T01, 'SE3')
+        T01 = T01.T; 
+    end
+
+    O1 = T01(1:3, 4);
+    
+    % 1. Extraer la submatriz de rotación 3x3 de T01 y calcular vector
+    R01 = T01(1:3, 1:3); 
+    p14_base = p_w - O1; 
+    p14_local = R01' * p14_base;
+    
+    
+    distancia_radial = p14_local(1); 
+    distancia_vertical = p14_local(2);       
+    
+    vec_r = [distancia_radial; distancia_vertical];
+    r = norm(vec_r); 
+    
+    H = sqrt(R.a(3)^2 + R.d(4)^2);
+    
+    
+    beta    = Tcoseno_a(R.a(2), r, H);
+    gamma   = Tcoseno_a(R.a(2), H, r);
+    
+    % --- CORRECCIÓN: Ángulo de la estructura en L del eslabón 3 ---
+    phi = atan2(R.d(4), R.a(3));
+    
+    
+    % CODO ARRIBA
+    Q(2, 5:6) = ( atan2(vec_r(2), vec_r(1)) + beta ) - R.offset(2);
+    Q(3, 5:6) = ( -pi + gamma + phi ) - R.offset(3);
+    
+    % CODO ABAJO
+    Q(2, 7:8) = ( atan2(vec_r(2), vec_r(1)) - beta ) - R.offset(2);
+    Q(3, 7:8) = ( pi - gamma + phi ) - R.offset(3);
+    
+
+    %% Despeje de la Muñeca Esférica (q4, q5, q6)
+    for i = 1:8
+        % Las matrices A01, A12, A23 se calculan con los q ya obtenidos
+        A01 = R.links(1).A(Q(1,i));
+        A12 = R.links(2).A(Q(2,i));
+        A23 = R.links(3).A(Q(3,i));
+        
+        % Compatibilidad por si usa la version nueva del Toolbox (objetos SE3)
+        if isa(A01, 'SE3'), A01 = A01.T; end
+        if isa(A12, 'SE3'), A12 = A12.T; end
+        if isa(A23, 'SE3'), A23 = A23.T; end
+        
+        T03 = A01 * A12 * A23;
+        R03T = T03(1:3, 1:3)'; % Inversa de la orientación del brazo
+        
+        Rot36 = R03T * T06(1:3, 1:3); % Matriz de rotación deseada para la muñeca
+        
+        % Prevención de Singularidad de Muñeca (q5 cercano a 0 o 180)
+        if abs(Rot36(3,3)) >= 0.9999
+            % Singularidad: Ejes 4 y 6 están colineales.
+            theta4 = 0; % Por convención, fijamos q4
+            theta5 = acos(Rot36(3,3)); % Da 0 o pi
+            
+            if Rot36(3,3) > 0 % Si q5 = 0
+                theta6 = atan2(Rot36(2,1), Rot36(1,1));
+            else % Si q5 = pi
+                theta6 = atan2(-Rot36(2,1), -Rot36(1,1));
+            end
+            
+        else
+            % Estado regular (No singular)
+            if mod(i, 2) ~= 0
+                % --- Solución A: No-Flip (q5 positivo) ---
+                theta4 = atan2(Rot36(2,3), Rot36(1,3));
+                theta5 = atan2(sqrt(Rot36(1,3)^2 + Rot36(2,3)^2), Rot36(3,3));
+                theta6 = atan2(Rot36(3,2), -Rot36(3,1)); 
+            else
+                % --- Solución B: Flip (q5 negativo) ---
+                % Al ser el seno de q5 negativo, se invierten los argumentos de q4 y q6
+                theta4 = atan2(-Rot36(2,3), -Rot36(1,3));
+                theta5 = atan2(-sqrt(Rot36(1,3)^2 + Rot36(2,3)^2), Rot36(3,3));
+                theta6 = atan2(-Rot36(3,2), Rot36(3,1)); 
+            end
+        end
+        
+        % Asignación al vector de salida (Restando los offsets si existieran)
+        Q(4,i) = theta4 - R.offset(4);
+        Q(5,i) = theta5 - R.offset(5);
+        Q(6,i) = theta6 - R.offset(6);
+    end
+    
+    % Asegurar ángulos entre -pi y pi
+    Q = wrapToPi(Q);
+    disp(Q)
+    
+    
+end

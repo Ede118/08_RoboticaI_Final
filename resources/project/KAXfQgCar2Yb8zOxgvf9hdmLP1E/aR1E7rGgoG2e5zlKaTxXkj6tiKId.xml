@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Info File="Code/my_robot.m" GroupUUID="default" Icon="" Name="my_robot" Type="StartUp" Visible="0">
+    <Extension Name="StartUpPrev" Value="2b857c10-cf15-4258-8366-c104a27c79ad"/>
+</Info>
