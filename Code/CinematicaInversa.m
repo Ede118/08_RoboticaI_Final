@@ -1,4 +1,4 @@
-function [Q] = CinematicaInversa(R, vector_p, q0)
+function [Q] = CinematicaInversa(R, vector_p, q0, test)
 % CINEMATICAINVERSA Calcula las 8 soluciones articulares (q) para un robot.
 % arguments (Input)
 %    R          % Estructura o modelo del robot (contiene d, a, alpha, etc.)
@@ -14,6 +14,10 @@ end
 
 if nargin < 3
     q0 = zeros(1, 6);
+end
+
+if nargin < 4
+    test = false;
 end
 
 N = size(vector_p, 1);
@@ -79,6 +83,42 @@ for k = 1:N
     q2_tmp = NaN(1, 4);
     q3_tmp = NaN(1, 4);
     
+    % ——————————————————————————————————————— %
+    %                q2 y q3                  %
+    % ——————————————————————————————————————— %
+
+    % r(1): Front Configuration
+    % r(2): Back Configuration
+
+    r = [ sqrt(px^2 + py^2) - a1; 
+        -sqrt(px^2 + py^2) - a1 ];
+    s = pz - d1; 
+
+    for j = 1:2
+        D     = sqrt(r(j)^2 + s^2);
+        alpha = atan2(s, r(j));
+
+        idx1 = 2*j - 1; % Índice Codo Arriba
+        idx2 = 2*j;     % Índice Codo Abajo
+
+        if D <= (L1 + L2 + 1e-6) && D >= (abs(L1 - L2) - 1e-6)
+            % Forzar a que D respete el triángulo (errores numéricos)
+            D_seguro = max(min(D, L1+L2), abs(L1-L2));
+
+            % Teorema del Coseno
+            beta  = Tcoseno_a(L1, L2, D_seguro);
+            gamma = Tcoseno_a(D_seguro, L1, L2);
+
+            % Elbow Up
+            q2_tmp(idx1) = alpha + gamma;
+            q3_tmp(idx1) = (beta - pi) + phi;
+
+            % Elbow Down
+            q2_tmp(idx2) = alpha - gamma;
+            q3_tmp(idx2) = -(beta - pi) +  phi;
+        end
+    end
+
         
     
     % ——————————————————————————————————————— %
@@ -174,8 +214,10 @@ for sol = 1:8
     end
 end
 
-if mejor_sol_inicial == 0
+if mejor_sol_inicial == 0 && ~test
     error('El punto inicial es inalcanzable. Revisa el espacio de trabajo o los límites articulares.');
+else
+    mejor_sol_inicial = 1;
 end
 
 Q(1, :) = QSol(1, :, mejor_sol_inicial);

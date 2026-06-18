@@ -30,11 +30,11 @@ Target_poses = Robot.fkine(q_test_rand);
 
 for k = 1:N_test
     vector_p_rand(k, 1:3) = Target_poses(k).t';
-    % Extraemos Roll, Pitch, Yaw en convención ZYX
+    % Extraer Roll, Pitch, Yaw en convención ZYX
     vector_p_rand(k, 4:6) = Target_poses(k).tr2rpy('zyx'); 
 end
 
-% Probar la función
+% Cronometrar
 tic;
 Q_calc_rand = CinematicaInversa(Robot, vector_p_rand);
 tiempo_ejecucion = toc;
@@ -62,7 +62,7 @@ end
 % TEST 2: EL LÍMITE DEL ESPACIO DE TRABAJO (SINGULARIDAD DE BORDE)
 % =========================================================================
 fprintf('--- TEST 2: Brazo completamente estirado ---\n');
-% Ponemos q2 y q3 en cero (o el valor que estire el brazo al máximo)
+% Valores articulares que estiren el brazo al maximo
 q_estirado = [0, 0, 0, 0, 0, 0]; 
 
 T_estirado = Robot.fkine(q_estirado);
@@ -79,14 +79,12 @@ fprintf('Error de posición al límite: %g mm\n\n', e_pos_estirado);
 % TEST 3: FUERA DEL ESPACIO DE TRABAJO (ROBUSTEZ)
 % =========================================================================
 fprintf('--- TEST 3: Coordenada Inalcanzable ---\n');
-% Pedimos un punto a 10 metros de distancia (imposible para este robot)
+% Pedimos un punto inalcanzable (distancia ~17 [m])
 vector_p_imposible = [10, 10, 10, 0, 0, 0]; 
 
 try
     Q_imposible = CinematicaInversa(Robot, vector_p_imposible);
-    % Si la función no se detiene, comprobamos si devolvió NaNs o Ceros.
     disp('La función se ejecutó. Verificando manejo de error silencioso...');
-    % Nota: Según tu código, debería saltar el error del 'all(Q(1,:)==0)'
 catch ME
     fprintf('La función detectó correctamente el error y se detuvo.\n');
     fprintf('Mensaje de tu función: "%s"\n', ME.message);
