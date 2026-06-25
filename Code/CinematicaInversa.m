@@ -151,7 +151,7 @@ end
 
 %%
 % —————————————————————————————————————————————————————— %
-% 3. SELECCIÓN DE LA SOLUCIÓN ÓPTIMA (Shortest Path)
+% 3. SELECCIÓN DE LA SOLUCIÓN ÓPTIMA
 % —————————————————————————————————————————————————————— %
 
 Q = zeros(N, 6); 
