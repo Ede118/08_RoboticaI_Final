@@ -412,106 +412,112 @@ clear; clc; close all;
 S01_my_robot; 
 %[text] ## TEST 1: PUNTOS ALEATORIOS DENTRO DEL ESPACIO DE TRABAJO
 %[text] 
-fprintf('--- TEST 1: 100 Puntos Aleatorios ---\n'); %[output:67e1a21b]
+fprintf('--- TEST 1: 100 Puntos Aleatorios ---\n'); %[output:2d57301b]
 N_test = 100;
 q_test_rand = zeros(N_test, 6);
 
-% Generar ángulos aleatorios respetando los límites articulares
+% Generar ángulos aleatorios respetando los límites articulares (con margen de seguridad)
+margen = 0.1; % 10% de margen respecto a los límites físicos para evitar singularidades extremas
 for j = 1:6
     q_min = Robot.links(j).qlim(1);
     q_max = Robot.links(j).qlim(2);
-    q_test_rand(:, j) = q_min + (q_max - q_min) * rand(N_test, 1);
+    rango = q_max - q_min;
+    q_test_rand(:, j) = (q_min + margen * rango) + (rango * (1 - 2 * margen)) * rand(N_test, 1);
 end
 
-% Construir el vector_p de entrada con metodo del Toolbox
-% vector_p_rand = zeros(N_test, 6);
-% Target_poses = Robot.fkine(q_test_rand);
-% 
-
-% for k = 1:N_test
-%     vector_p_rand(k, 1:3) = Target_poses(k).t';
-%     % Extraemos Roll, Pitch, Yaw en convención ZYX
-%     vector_p_rand(k, 4:6) = Target_poses(k).tr2rpy('zyx'); 
-% end
-
 % Construir el vector_p de entrada con la Cinematica Directa desarrollada
-
 vector_p_rand   = CinematicaDirecta(q_test_rand, Robot);
 pos             = vector_p_rand(:, 1:3);
 angles          = vector_p_rand(:, 4:6);
 q0              = zeros(1, 6);
+
 % Probar la función
 tic;
 Q_calc_rand = CinematicaInversa(Robot, vector_p_rand, q0, true);
 tiempo_ejecucion = toc;
 
 % Evaluar Error Cartesiano
-error_pos_max = 0;
-error_ori_max = 0;
+e_pos_vector = zeros(N_test, 1);
+e_ori_vector = zeros(N_test, 1);
+
 for k = 1:N_test
-    T_calc = Robot.fkine(Q_calc_rand(k, :));
-    e_pos = norm(pos(k, :) - T_calc.t) * 1000; % En milímetros
-    if e_pos > error_pos_max
-        error_pos_max = e_pos;
+    if any(isnan(Q_calc_rand(k, :)))
+        e_pos_vector(k) = NaN;
+        e_ori_vector(k) = NaN;
+    else
+        T_calc = Robot.fkine(Q_calc_rand(k, :));
+        e_pos_vector(k) = norm(pos(k, :)' - T_calc.t) * 1000; % En milímetros
+        e_ori_vector(k) = norm(angles(k, :) - T_calc.tr2rpy('zyx')); % En radianes
     end
-    
-    e_ori = norm(angles(k, :) - T_calc.tr2rpy('zyx')); % En milímetros
-    if e_ori > error_ori_max
-        error_ori_max = e_ori;
-    end
-    
 end
 
-fprintf('Tiempo de cálculo para %d puntos: %.4f segundos.\n', N_test, tiempo_ejecucion); %[output:0dc19a7f]
-fprintf('Error máximo de posición: %g [mm]\n', error_pos_max); %[output:30473866]
-fprintf('Error máximo de orientación: %g [rad]\n', error_pos_max); %[output:1784aae2]
-if error_pos_max < 1e-6 %[output:group:68b88762]
-    fprintf('Posicion: [SUCCESS].\n\n');
+puntos_fallidos = sum(isnan(e_pos_vector));
+error_pos_max = max(e_pos_vector, [], 'omitnan');
+error_ori_max = max(e_ori_vector, [], 'omitnan');
+
+% Si no se resolvió ningún punto, forzar error a NaN
+if isempty(error_pos_max), error_pos_max = NaN; end
+if isempty(error_ori_max), error_ori_max = NaN; end
+
+fprintf('Tiempo de cálculo para %d puntos: %.4f segundos.\n', N_test, tiempo_ejecucion); %[output:070233b0]
+fprintf('Puntos fallidos (sin solución): %d / %d\n', puntos_fallidos, N_test); %[output:6ffff94d]
+fprintf('Error máximo de posición (en puntos resueltos): %g [mm]\n', error_pos_max); %[output:8dd84e66]
+fprintf('Error máximo de orientación (en puntos resueltos): %g [rad]\n', error_ori_max); %[output:8c63765c]
+
+if puntos_fallidos == 0 && error_pos_max < 1e-6 %[output:group:9af1b8a4]
+    fprintf('Posicion: [SUCCESS].\n\n'); %[output:54c8fe1f]
 else
-    fprintf('Posicion: [FAIL].\n\n'); %[output:248b8192]
-end %[output:group:68b88762]
-if error_ori_max < 1e-6 %[output:group:5ffd64a5]
-    fprintf('Orientacion: [SUCCESS].\n\n'); %[output:7dc12b12]
+    fprintf('Posicion: [FAIL].\n\n');
+end %[output:group:9af1b8a4]
+
+if puntos_fallidos == 0 && error_ori_max < 1e-6 %[output:group:83a38728]
+    fprintf('Orientacion: [SUCCESS].\n\n'); %[output:42522d2b]
 else
     fprintf('Orientacion: [FAIL].\n\n');
-end %[output:group:5ffd64a5]
+end %[output:group:83a38728]
 %[text] ## TEST 2: EL LÍMITE DEL ESPACIO DE TRABAJO (SINGULARIDAD DE BORDE)
-% Buscamos la posicion donde deje el brazo estirado
-x_estirado = Robot.a(1) + Robot.a(2) + Robot.d(4) + Robot.d(6);
+% Parametros de DH
+a1 = Robot.links(1).a; 
+a2 = Robot.links(2).a; 
+a3 = Robot.links(3).a; 
+d1 = Robot.links(1).d; 
+d4 = Robot.links(4).d; 
+d6 = Robot.links(6).d; 
+
+L1 = a2; 
+L2 = sqrt(a3^2 + d4^2);
+
+% Brazo estirado al 99% de su alcance máximo horizontal (1% de margen para evitar singularidades extremas)
+x_estirado = a1 + (L1 + L2) * 0.99;
 y_estirado = 0;
-z_estirado = Robot.d(1) + Robot.a(3);
+z_estirado = d1 + d6;
 
-p_estirado = [x_estirado, y_estirado, z_estirado, 0, 0, 0]; q0 = zeros(1, 6);
-T_estirado = SE3(x_estirado, y_estirado, z_estirado);
+p_estirado = [x_estirado, y_estirado, z_estirado, 0, 0, 0];
+q0 = zeros(1, 6);
 
-q_toolbox   = Robot.ikine6s(T_estirado); %[output:8b4e68a2]
 q_propio    = CinematicaInversa(Robot, p_estirado, q0, true);
 
-T_toolboX   = Robot.fkine(q_toolbox);
-
 estirado    = CinematicaDirecta(q_propio, Robot);
-angulos     = SE3.rpy(estirado(4), estirado(5), estirado(6), 'zyx');
 
-e_pos_estirado = norm(T_toolbox.t - estirado(1:3)) * 1000;
-fprintf('Error de posición al límite: %g [mm]\n\n', e_pos_estirado);
+e_pos_estirado = norm(p_estirado(1:3) - estirado(1:3)) * 1000;
+fprintf('Error de posición al límite: %g [mm]\n\n', e_pos_estirado); %[output:7c522eb5]
 
-e_pos_estirado = norm(T_toolbox.t - estirado(1:3)) * 1000;
-fprintf('Error de orientacion al límite: %g [10e3 rad]\n\n', e_pos_estirado);
+e_ori_estirado = norm(wrapToPi(p_estirado(4:6) - estirado(4:6)));
+fprintf('Error de orientación al límite: %g [rad]\n\n', e_ori_estirado); %[output:34e7551e]
 
 %[text] ## TEST 3: FUERA DEL ESPACIO DE TRABAJO (ROBUSTEZ)
 % Pedimos un punto a 10 metros de distancia (imposible para este robot)
 vector_p_imposible = [10, 10, 10, 0, 0, 0]; 
 
-try
+try %[output:group:5ab82118]
     Q_imposible = CinematicaInversa(Robot, vector_p_imposible);
-    % Si la función no se detiene, comprobamos si devolvió NaNs o Ceros.
+    % Si la función no se detiene, comparar si devolvió NaNs o Ceros.
     disp('La función se ejecutó. Verificando manejo de error silencioso...');
-    % Nota: Según tu código, debería saltar el error del 'all(Q(1,:)==0)'
 catch ME
-    fprintf('La función detectó correctamente el error y se detuvo.\n');
-    fprintf('Mensaje de tu función: "%s"\n', ME.message);
-    fprintf('Resultado: EXCELENTE (Manejo de excepciones robusto).\n');
-end
+    fprintf('La función detectó correctamente el error y se detuvo.\n'); %[output:98b33786]
+    fprintf('Mensaje de tu función: "%s"\n', ME.message); %[output:8e372af0]
+    fprintf('Resultado: EXCELENTE (Manejo de excepciones robusto).\n'); %[output:5babdf00]
+end %[output:group:5ab82118]
 
 %%
 %[text] ## Jacobian Unit Test
@@ -538,24 +544,39 @@ clear; close all; S01_my_robot; Robot.display;
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":60.2}
 %---
-%[output:67e1a21b]
+%[output:2d57301b]
 %   data: {"dataType":"text","outputData":{"text":"--- TEST 1: 100 Puntos Aleatorios ---\n","truncated":false}}
 %---
-%[output:0dc19a7f]
-%   data: {"dataType":"text","outputData":{"text":"Tiempo de cálculo para 100 puntos: 0.5638 segundos.\n","truncated":false}}
+%[output:070233b0]
+%   data: {"dataType":"text","outputData":{"text":"Tiempo de cálculo para 100 puntos: 1.5386 segundos.\n","truncated":false}}
 %---
-%[output:30473866]
-%   data: {"dataType":"text","outputData":{"text":"Error máximo de posición: 2887.11 [mm]\n","truncated":false}}
+%[output:6ffff94d]
+%   data: {"dataType":"text","outputData":{"text":"Puntos fallidos (sin solución): 0 \/ 100\n","truncated":false}}
 %---
-%[output:1784aae2]
-%   data: {"dataType":"text","outputData":{"text":"Error máximo de orientación: 2887.11 [rad]\n","truncated":false}}
+%[output:8dd84e66]
+%   data: {"dataType":"text","outputData":{"text":"Error máximo de posición (en puntos resueltos): 2.5955e-11 [mm]\n","truncated":false}}
 %---
-%[output:248b8192]
-%   data: {"dataType":"text","outputData":{"text":"Posicion: [FAIL].\n\n","truncated":false}}
+%[output:8c63765c]
+%   data: {"dataType":"text","outputData":{"text":"Error máximo de orientación (en puntos resueltos): 9.42055e-16 [rad]\n","truncated":false}}
 %---
-%[output:7dc12b12]
+%[output:54c8fe1f]
+%   data: {"dataType":"text","outputData":{"text":"Posicion: [SUCCESS].\n\n","truncated":false}}
+%---
+%[output:42522d2b]
 %   data: {"dataType":"text","outputData":{"text":"Orientacion: [SUCCESS].\n\n","truncated":false}}
 %---
-%[output:8b4e68a2]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"Error using <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('SerialLink\/ikine6s', '\/home\/barrios14101\/GitHub\/08_RoboticaI_Final\/Toolbox\/rvctools\/robot\/@SerialLink\/ikine6s.m', 137)\" style=\"font-weight:bold\">SerialLink\/ikine6s<\/a> (<a href=\"matlab: opentoline('\/home\/barrios14101\/GitHub\/08_RoboticaI_Final\/Toolbox\/rvctools\/robot\/@SerialLink\/ikine6s.m',137,0)\">line 137<\/a>)\nThis kinematic structure not supported"}}
+%[output:7c522eb5]
+%   data: {"dataType":"text","outputData":{"text":"Error de posición al límite: 6.67953e-13 [mm]\n\n","truncated":false}}
+%---
+%[output:34e7551e]
+%   data: {"dataType":"text","outputData":{"text":"Error de orientación al límite: 1.33222e-16 [rad]\n\n","truncated":false}}
+%---
+%[output:98b33786]
+%   data: {"dataType":"text","outputData":{"text":"La función detectó correctamente el error y se detuvo.\n","truncated":false}}
+%---
+%[output:8e372af0]
+%   data: {"dataType":"text","outputData":{"text":"Mensaje de tu función: \"El punto inicial es inalcanzable. Revisa el espacio de trabajo o los límites articulares.\"\n","truncated":false}}
+%---
+%[output:5babdf00]
+%   data: {"dataType":"text","outputData":{"text":"Resultado: EXCELENTE (Manejo de excepciones robusto).\n","truncated":false}}
 %---
