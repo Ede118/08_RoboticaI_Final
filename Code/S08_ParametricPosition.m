@@ -56,7 +56,7 @@ Posiciones_Cartesianas = [Trayectoria_X, Trayectoria_Y, Trayectoria_Z];
 
 %% Visualización 3D
 figure('Color','w', 'Name', 'Planificación de Soldadura Cilíndrica');
-
+ 
 % Dibujar el "cilindro"
 [Xc, Yc, Zc] = cylinder(R, 50);
 Zc = Zc * (z2 + 0.2);

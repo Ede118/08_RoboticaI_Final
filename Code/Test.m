@@ -411,8 +411,6 @@ grid on;grid minor;
 clear; clc; close all;
 S01_my_robot; 
 %[text] ## TEST 1: PUNTOS ALEATORIOS DENTRO DEL ESPACIO DE TRABAJO
-%[text] 
-fprintf('--- TEST 1: 100 Puntos Aleatorios ---\n'); %[output:2d57301b]
 N_test = 100;
 q_test_rand = zeros(N_test, 6);
 
@@ -543,9 +541,6 @@ clear; close all; S01_my_robot; Robot.display;
 %---
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":60.2}
-%---
-%[output:2d57301b]
-%   data: {"dataType":"text","outputData":{"text":"--- TEST 1: 100 Puntos Aleatorios ---\n","truncated":false}}
 %---
 %[output:070233b0]
 %   data: {"dataType":"text","outputData":{"text":"Tiempo de cálculo para 100 puntos: 1.5386 segundos.\n","truncated":false}}
