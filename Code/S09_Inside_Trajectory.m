@@ -145,124 +145,124 @@ Tramos_Z = {Z_T1, Z_T2, Z_T3, Z_T4};
 Nombres = {'Tramo 1 (Subida)', 'Tramo 2 (Arco Sup)', 'Tramo 3 (Bajada)', 'Tramo 4 (Arco Inf)'};
 
 % 3. Bucle de cálculo y graficación
-carpeta_destino_C = 'Graficos_Cinematica_Cartesiana_IN';
-if ~exist(carpeta_destino_C, 'dir')
-    mkdir(carpeta_destino_C);
-end
-
-for i = 1:4
-    % Extraer posiciones del tramo actual
-    X = Tramos_X{i};
-    Y = Tramos_Y{i};
-    Z = Tramos_Z{i};
-
-    % Cálculo Numérico de Velocidades (dx/dt, dy/dt, dz/dt)
-    Vx = gradient(X, dt);
-    Vy = gradient(Y, dt);
-    Vz = gradient(Z, dt);
-
-    % Cálculo Numérico de Aceleraciones (dv/dt)
-    Ax = gradient(Vx, dt);
-    Ay = gradient(Vy, dt);
-    Az = gradient(Vz, dt);
-
-    % --- CREACIÓN DE LA FIGURA ---
-    fig1 = figure('Color', 'w', 'Name', ['Posicion - ' Nombres{i}]);
-    plot(t, [X Y Z], 'LineWidth', 1.5);
-    title(['Posición Cartesiana - ' Nombres{i}]);
-    ylabel('Posición [m]'); xlabel('Tiempo [s]');
-    lgdX = legend('X', 'Y', 'Z', 'Location', 'eastoutside'); lgdX.ItemHitFcn = @toggleSignal;
-    grid on; grid minor;
-
-    nombre_pos = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Posicion.png', i));
-    exportgraphics(fig1, nombre_pos, 'Resolution', 300);
-
-    % Gráfico de Velocidad
-    fig2 = figure('Color', 'w', 'Name', ['Velocidad - ' Nombres{i}]);
-    plot(t, [Vx Vy Vz], 'LineWidth', 1.5);
-    title(['Velocidad Cartesiana - ' Nombres{i}]);
-    ylabel('Velocidad [m/s]'); xlabel('Tiempo [s]');
-    lgdV = legend('V_x', 'V_y', 'V_z', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
-    grid on; grid minor;
-
-    nombre_vel = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Velocidad.png', i));
-    exportgraphics(fig2, nombre_vel, 'Resolution', 300);
-
-    % Gráfico de Aceleración
-    fig3 = figure('Color', 'w', 'Name', ['Aceleración - ' Nombres{i}]);
-    plot(t, [Ax Ay Az], 'LineWidth', 1.5);
-    title(['Aceleración Cartesiana - ' Nombres{i}]);
-    ylabel('Acel. [m/s^2]'); xlabel('Tiempo [s]');
-    lgdA = legend('A_x', 'A_y', 'A_z', 'Location', 'eastoutside'); lgdA.ItemHitFcn = @toggleSignal;
-    grid on; grid minor;
-
-    nombre_acc = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Aceleracion.png', i));
-    exportgraphics(fig3, nombre_acc, 'Resolution', 300);
-end
-
-disp('Los 12 gráficos han sido guardados en la carpeta "Graficos_Cinematica".');
-
-%% Análisis Cinemático en el Espacio Articular (Motores)
-
-% 1. Definir el tiempo físico total
-cant_tramos = 4;
-tiempo_total = cant_tramos*tiempo_por_tramo; 
-t_total = linspace(0, tiempo_total, Total_Pasos);
-dt_total = t_total(2) - t_total(1);
-
-% 2. Inicializar matrices para Velocidad y Aceleración Articular
-V_art = zeros(Total_Pasos, 6);
-A_art = zeros(Total_Pasos, 6);
-
-% 3. Cálculo Numérico usando 'gradient' para cada una de las 6 articulaciones
-
-carpeta_destino_Q = 'Graficos_Cinematica_Articular_IN';
-if ~exist(carpeta_destino_Q, 'dir')
-    mkdir(carpeta_destino_Q);
-end
-
-for j = 1:6
-    V_art(:, j) = gradient(Q(:, j), dt_total);
-    A_art(:, j) = gradient(V_art(:, j), dt_total);
-end
-
-nombres_ejes = {'q_1 (Base)', 'q_2 (Hombro)', 'q_3 (Codo)', 'q_4 (Muñeca 1)', 'q_5 (Muñeca 2)', 'q_6 (Muñeca 3)'};
-
-% --- GRÁFICO 1: POSICIÓN ARTICULAR ---
-fig_q = figure('Color', 'w', 'Name', 'Posición Articular');
-% Multiplicamos por 180/pi si prefieres ver los ángulos en GRADOS (opcional)
-plot(t_total, rad2deg(Q), 'LineWidth', 1.5); 
-title('Evolución de la Posición Articular');
-ylabel('Posición [deg]'); xlabel('Tiempo [s]');
-lgdQ = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQ.ItemHitFcn = @toggleSignal;
-grid on; grid minor;
-
-% Guardar imagen
-nombre_q = fullfile(carpeta_destino_Q, 'Articular_1_Posicion.png');
-exportgraphics(fig_q, nombre_q, 'Resolution', 300);
-
-% --- GRÁFICO 2: VELOCIDAD ARTICULAR ---
-fig_vq = figure('Color', 'w', 'Name', 'Velocidad Articular');
-plot(t_total, rad2deg(V_art), 'LineWidth', 1.5);
-title('Evolución de la Velocidad Articular');
-ylabel('Velocidad [deg/s]'); xlabel('Tiempo [s]');
-lgdQd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQd.ItemHitFcn = @toggleSignal;
-grid on; grid minor;
-
-nombre_vq = fullfile(carpeta_destino_Q, 'Articular_2_Velocidad.png');
-exportgraphics(fig_vq, nombre_vq, 'Resolution', 300);
-
-% --- GRÁFICO 3: ACELERACIÓN ARTICULAR ---
-fig_aq = figure('Color', 'w', 'Name', 'Aceleración Articular');
-plot(t_total, rad2deg(A_art), 'LineWidth', 1.5);
-title('Evolución de la Aceleración Articular');
-ylabel('Aceleración [deg/s^2]'); xlabel('Tiempo [s]');
-lgdQdd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQdd.ItemHitFcn = @toggleSignal;
-grid on; grid minor;
-
-% Guardar imagen
-nombre_aq = fullfile(carpeta_destino_Q, 'Articular_3_Aceleracion.png');
-exportgraphics(fig_aq, nombre_aq, 'Resolution', 300);
+% carpeta_destino_C = 'Graficos_Cinematica_Cartesiana_IN';
+% if ~exist(carpeta_destino_C, 'dir')
+%     mkdir(carpeta_destino_C);
+% end
+% 
+% for i = 1:4
+%     % Extraer posiciones del tramo actual
+%     X = Tramos_X{i};
+%     Y = Tramos_Y{i};
+%     Z = Tramos_Z{i};
+% 
+%     % Cálculo Numérico de Velocidades (dx/dt, dy/dt, dz/dt)
+%     Vx = gradient(X, dt);
+%     Vy = gradient(Y, dt);
+%     Vz = gradient(Z, dt);
+% 
+%     % Cálculo Numérico de Aceleraciones (dv/dt)
+%     Ax = gradient(Vx, dt);
+%     Ay = gradient(Vy, dt);
+%     Az = gradient(Vz, dt);
+% 
+%     % --- CREACIÓN DE LA FIGURA ---
+%     fig1 = figure('Color', 'w', 'Name', ['Posicion - ' Nombres{i}]);
+%     plot(t, [X Y Z], 'LineWidth', 1.5);
+%     title(['Posición Cartesiana - ' Nombres{i}]);
+%     ylabel('Posición [m]'); xlabel('Tiempo [s]');
+%     lgdX = legend('X', 'Y', 'Z', 'Location', 'eastoutside'); lgdX.ItemHitFcn = @toggleSignal;
+%     grid on; grid minor;
+% 
+%     % nombre_pos = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Posicion.png', i));
+%     % exportgraphics(fig1, nombre_pos, 'Resolution', 300);
+% 
+%     % Gráfico de Velocidad
+%     fig2 = figure('Color', 'w', 'Name', ['Velocidad - ' Nombres{i}]);
+%     plot(t, [Vx Vy Vz], 'LineWidth', 1.5);
+%     title(['Velocidad Cartesiana - ' Nombres{i}]);
+%     ylabel('Velocidad [m/s]'); xlabel('Tiempo [s]');
+%     lgdV = legend('V_x', 'V_y', 'V_z', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
+%     grid on; grid minor;
+% 
+%     % nombre_vel = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Velocidad.png', i));
+%     % exportgraphics(fig2, nombre_vel, 'Resolution', 300);
+% 
+%     % Gráfico de Aceleración
+%     fig3 = figure('Color', 'w', 'Name', ['Aceleración - ' Nombres{i}]);
+%     plot(t, [Ax Ay Az], 'LineWidth', 1.5);
+%     title(['Aceleración Cartesiana - ' Nombres{i}]);
+%     ylabel('Acel. [m/s^2]'); xlabel('Tiempo [s]');
+%     lgdA = legend('A_x', 'A_y', 'A_z', 'Location', 'eastoutside'); lgdA.ItemHitFcn = @toggleSignal;
+%     grid on; grid minor;
+% 
+%     % nombre_acc = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Aceleracion.png', i));
+%     % exportgraphics(fig3, nombre_acc, 'Resolution', 300);
+% end
+% 
+% disp('Los 12 gráficos han sido guardados en la carpeta "Graficos_Cinematica".');
+% 
+% %% Análisis Cinemático en el Espacio Articular (Motores)
+% 
+% % 1. Definir el tiempo físico total
+% cant_tramos = 4;
+% tiempo_total = cant_tramos*tiempo_por_tramo; 
+% t_total = linspace(0, tiempo_total, Total_Pasos);
+% dt_total = t_total(2) - t_total(1);
+% 
+% % 2. Inicializar matrices para Velocidad y Aceleración Articular
+% V_art = zeros(Total_Pasos, 6);
+% A_art = zeros(Total_Pasos, 6);
+% 
+% % 3. Cálculo Numérico usando 'gradient' para cada una de las 6 articulaciones
+% 
+% carpeta_destino_Q = 'Graficos_Cinematica_Articular_IN';
+% if ~exist(carpeta_destino_Q, 'dir')
+%     mkdir(carpeta_destino_Q);
+% end
+% 
+% for j = 1:6
+%     V_art(:, j) = gradient(Q(:, j), dt_total);
+%     A_art(:, j) = gradient(V_art(:, j), dt_total);
+% end
+% 
+% nombres_ejes = {'q_1 (Base)', 'q_2 (Hombro)', 'q_3 (Codo)', 'q_4 (Muñeca 1)', 'q_5 (Muñeca 2)', 'q_6 (Muñeca 3)'};
+% 
+% % --- GRÁFICO 1: POSICIÓN ARTICULAR ---
+% fig_q = figure('Color', 'w', 'Name', 'Posición Articular');
+% % Multiplicamos por 180/pi si prefieres ver los ángulos en GRADOS (opcional)
+% plot(t_total, rad2deg(Q), 'LineWidth', 1.5); 
+% title('Evolución de la Posición Articular');
+% ylabel('Posición [deg]'); xlabel('Tiempo [s]');
+% lgdQ = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQ.ItemHitFcn = @toggleSignal;
+% grid on; grid minor;
+% 
+% % Guardar imagen
+% % nombre_q = fullfile(carpeta_destino_Q, 'Articular_1_Posicion.png');
+% % exportgraphics(fig_q, nombre_q, 'Resolution', 300);
+% 
+% % --- GRÁFICO 2: VELOCIDAD ARTICULAR ---
+% fig_vq = figure('Color', 'w', 'Name', 'Velocidad Articular');
+% plot(t_total, rad2deg(V_art), 'LineWidth', 1.5);
+% title('Evolución de la Velocidad Articular');
+% ylabel('Velocidad [deg/s]'); xlabel('Tiempo [s]');
+% lgdQd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQd.ItemHitFcn = @toggleSignal;
+% grid on; grid minor;
+% 
+% % nombre_vq = fullfile(carpeta_destino_Q, 'Articular_2_Velocidad.png');
+% % exportgraphics(fig_vq, nombre_vq, 'Resolution', 300);
+% 
+% % --- GRÁFICO 3: ACELERACIÓN ARTICULAR ---
+% fig_aq = figure('Color', 'w', 'Name', 'Aceleración Articular');
+% plot(t_total, rad2deg(A_art), 'LineWidth', 1.5);
+% title('Evolución de la Aceleración Articular');
+% ylabel('Aceleración [deg/s^2]'); xlabel('Tiempo [s]');
+% lgdQdd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQdd.ItemHitFcn = @toggleSignal;
+% grid on; grid minor;
+% 
+% % Guardar imagen
+% % nombre_aq = fullfile(carpeta_destino_Q, 'Articular_3_Aceleracion.png');
+% % exportgraphics(fig_aq, nombre_aq, 'Resolution', 300);
 
 disp('Los 3 gráficos articulares han sido guardados.');
 

@@ -173,8 +173,9 @@ for i = 1:4
     ylabel('Posición [m]'); xlabel('Tiempo [s]');
     lgdX = legend('X', 'Y', 'Z', 'Location', 'eastoutside'); lgdX.ItemHitFcn = @toggleSignal;
     grid on; grid minor;
-    nombre_pos = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Posicion.png', i));
-    exportgraphics(fig1, nombre_pos, 'Resolution', 300);
+    
+    % nombre_pos = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Posicion.png', i));
+    % exportgraphics(fig1, nombre_pos, 'Resolution', 300);
 
     % Gráfico de Velocidad
     fig2 = figure('Color', 'w', 'Name', ['Velocidad - ' Nombres{i}]);
@@ -183,8 +184,9 @@ for i = 1:4
     ylabel('Velocidad [m/s]'); xlabel('Tiempo [s]');
     lgdV = legend('V_x', 'V_y', 'V_z', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
     grid on; grid minor;
-    nombre_vel = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Velocidad.png', i));
-    exportgraphics(fig2, nombre_vel, 'Resolution', 300);
+
+    % nombre_vel = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Velocidad.png', i));
+    % exportgraphics(fig2, nombre_vel, 'Resolution', 300);
 
     % Gráfico de Aceleración
     fig3 = figure('Color', 'w', 'Name', ['Aceleración - ' Nombres{i}]);
@@ -193,8 +195,9 @@ for i = 1:4
     ylabel('Acel. [m/s^2]'); xlabel('Tiempo [s]');
     lgdA = legend('A_x', 'A_y', 'A_z', 'Location', 'eastoutside'); lgdA.ItemHitFcn = @toggleSignal;
     grid on; grid minor;
-    nombre_acc = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Aceleracion.png', i));
-    exportgraphics(fig3, nombre_acc, 'Resolution', 300);
+
+    % nombre_acc = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Aceleracion.png', i));
+    % exportgraphics(fig3, nombre_acc, 'Resolution', 300);
 end
 
 disp('Los 12 gráficos han sido guardados en la carpeta "Graficos_Cinematica".');
@@ -235,8 +238,8 @@ lgdQ = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQ.ItemHitFcn = @toggl
 grid on; grid minor;
 
 % Guardar imagen
-nombre_q = fullfile(carpeta_destino_Q, 'Articular_1_Posicion.png');
-exportgraphics(fig_q, nombre_q, 'Resolution', 300);
+% nombre_q = fullfile(carpeta_destino_Q, 'Articular_1_Posicion.png');
+% exportgraphics(fig_q, nombre_q, 'Resolution', 300);
 
 % --- GRÁFICO 2: VELOCIDAD ARTICULAR ---
 fig_vq = figure('Color', 'w', 'Name', 'Velocidad Articular');
@@ -246,8 +249,8 @@ ylabel('Velocidad [deg/s]'); xlabel('Tiempo [s]');
 lgdQd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQd.ItemHitFcn = @toggleSignal;
 grid on; grid minor;
 
-nombre_vq = fullfile(carpeta_destino_Q, 'Articular_2_Velocidad.png');
-exportgraphics(fig_vq, nombre_vq, 'Resolution', 300);
+% nombre_vq = fullfile(carpeta_destino_Q, 'Articular_2_Velocidad.png');
+% exportgraphics(fig_vq, nombre_vq, 'Resolution', 300);
 
 % --- GRÁFICO 3: ACELERACIÓN ARTICULAR ---
 fig_aq = figure('Color', 'w', 'Name', 'Aceleración Articular');
@@ -258,8 +261,8 @@ lgdQdd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQdd.ItemHitFcn = @t
 grid on; grid minor;
 
 % Guardar imagen
-nombre_aq = fullfile(carpeta_destino_Q, 'Articular_3_Aceleracion.png');
-exportgraphics(fig_aq, nombre_aq, 'Resolution', 300);
+% nombre_aq = fullfile(carpeta_destino_Q, 'Articular_3_Aceleracion.png');
+% exportgraphics(fig_aq, nombre_aq, 'Resolution', 300);
 
 disp('Los 3 gráficos articulares han sido guardados.');
 

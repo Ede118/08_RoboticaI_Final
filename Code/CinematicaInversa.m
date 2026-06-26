@@ -115,7 +115,7 @@ for k = 1:N
 
             % Elbow Down
             q2_tmp(idx2) = alpha - gamma;
-            q3_tmp(idx2) = -(beta - pi) +  phi;
+            q3_tmp(idx2) = -(beta - pi) + phi;
         end
     end
     
