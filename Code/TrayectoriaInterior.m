@@ -1,22 +1,15 @@
-function [outputArg1,outputArg2] = TrayectoriaInterior(inputArg1,inputArg2)
+function TrayectoriaInterior(guardar_cartesiano, guardar_articular, guardar_jacobiano, guardar_video)
 % Requiere Robotics Toolbox for MATLAB (Peter Corke)
 % https://petercorke.com/toolboxes/robotics-toolbox/
 
 arguments (Input)
-    inputArg1
-    inputArg2
+    guardar_cartesiano
+    guardar_articular
+    guardar_jacobiano
+    guardar_video
 end
-
-arguments (Output)
-    outputArg1
-    outputArg2
-end
-
-
-
 
 %% Path Completo: Posición y Orientación (Soldadura con Weaving e Inclinación)
-clear; clc; close all;
 
 % Parámetros Especiales
 R = 1.2;                    % Radio del cilindro [m]
@@ -78,19 +71,34 @@ Trayectoria_Adv   = [t_adv_T1; t_adv_T2; t_adv_T3; t_adv_T4];
 Total_Pasos = length(Trayectoria_X);
 
 %% ZONA DE EMPALME / BLENDING
-% Definimos cuántos puntos usará el robot para "redondear" la transición.
-% Se define el "porcentaje de empalme".
+% Suavizamos SOLO las transiciones entre tramos, preservando el weaving.
 
 porcentaje_empalme = 0.02;
-zona_empalme = round(pasos*porcentaje_empalme); 
+ancho_empalme = round(pasos * porcentaje_empalme);
 
-% 1. Suavizamos la Geometría
-Trayectoria_X = smoothdata(Trayectoria_X, 'gaussian', zona_empalme);
-Trayectoria_Y = smoothdata(Trayectoria_Y, 'gaussian', zona_empalme);
-Trayectoria_Z = smoothdata(Trayectoria_Z, 'gaussian', zona_empalme);
+% Índices donde un tramo se une con el siguiente
+transiciones = [pasos, 2*pasos, 3*pasos];
 
-% 2. Suavizamos la Orientación
-Trayectoria_Adv = smoothdata(Trayectoria_Adv, 1, 'gaussian', zona_empalme);
+% Construir máscara de peso: ~1 en la transición, ~0 lejos de ella
+peso = zeros(Total_Pasos, 1);
+for idx = transiciones
+    rango = max(1, idx - ancho_empalme) : min(Total_Pasos, idx + ancho_empalme);
+    w = exp(-0.5 * ((rango - idx) / (ancho_empalme / 3)).^2);
+    peso(rango) = max(peso(rango), w');
+end
+
+% 1. Suavizar Geometría solo en las transiciones
+Suave_X = smoothdata(Trayectoria_X, 'gaussian', 2 * ancho_empalme);
+Suave_Y = smoothdata(Trayectoria_Y, 'gaussian', 2 * ancho_empalme);
+Suave_Z = smoothdata(Trayectoria_Z, 'gaussian', 2 * ancho_empalme);
+
+Trayectoria_X = (1 - peso) .* Trayectoria_X + peso .* Suave_X;
+Trayectoria_Y = (1 - peso) .* Trayectoria_Y + peso .* Suave_Y;
+Trayectoria_Z = (1 - peso) .* Trayectoria_Z + peso .* Suave_Z;
+
+% 2. Suavizar Orientación solo en las transiciones
+Suave_Adv = smoothdata(Trayectoria_Adv, 1, 'gaussian', 2 * ancho_empalme);
+Trayectoria_Adv = (1 - peso) .* Trayectoria_Adv + peso .* Suave_Adv;
 
 % Se vuelven a normalizar los vectores para que las matemáticas de la rotación no fallen.
 Trayectoria_Adv = Trayectoria_Adv ./ vecnorm(Trayectoria_Adv, 2, 2);
@@ -140,14 +148,28 @@ S01_my_robot;
 % q1 apunta al inicio (theta1), q2 inclina hombro adelante, q3 levanta codo
 q_semilla_inicial = [theta1, pi/4, -pi/4, 0, pi/2, 0]; 
 
-[Q] = CinematicaInversa(Robot, CPosition, q_semilla_inicial);
+[Q_middle] = CinematicaInversa(Robot, CPosition, q_semilla_inicial);
+
+% --- AGREGADO: Trayectorias de Homing (Aproximación y Retirada) ---
+% Se elige q5 = pi/2 para que en el viaje hacia la zona de soldadura (donde q5 ~ pi/2)
+% no cruce por q5 = 0 (evitando pasar por la singularidad de muñeca).
+q_home = [0, 0, 0, 0, pi/2, 0]; % Posición de Homing (Ready / L-Shape)
+pasos_homing = 50; % Cantidad de frames para el viaje desde/hacia homing
+tiempo_homing = 5; % Segundos físicos que tarda en acercarse/alejarse
+
+% jtraj calcula una trayectoria suave en el espacio articular
+Q_approach = jtraj(q_home, Q_middle(1,:), pasos_homing);
+Q_retreat  = jtraj(Q_middle(end,:), q_home, pasos_homing);
+
+% Concatenamos las secuencias sin duplicar el punto de conexión
+Q = [Q_approach; Q_middle(2:end, :); Q_retreat(2:end, :)];
 
 fprintf('Matriz Target_Poses (%dx6) generada con éxito.\n', size(Q, 1));
 
 %% Análisis Cinemático en el Espacio Cartesiano - Por Tramo
 
 % 1. Definir el tiempo físico de la trayectoria
-tiempo_por_tramo = 5; 
+tiempo_por_tramo = 60; 
 t = linspace(0, tiempo_por_tramo, pasos);
 dt = t(2) - t(1); 
 
@@ -158,127 +180,166 @@ Tramos_Z = {Z_T1, Z_T2, Z_T3, Z_T4};
 Nombres = {'Tramo 1 (Subida)', 'Tramo 2 (Arco Sup)', 'Tramo 3 (Bajada)', 'Tramo 4 (Arco Inf)'};
 
 % 3. Bucle de cálculo y graficación
-% carpeta_destino_C = 'Graficos_Cinematica_Cartesiana_IN';
-% if ~exist(carpeta_destino_C, 'dir')
-%     mkdir(carpeta_destino_C);
-% end
-% 
-% for i = 1:4
-%     % Extraer posiciones del tramo actual
-%     X = Tramos_X{i};
-%     Y = Tramos_Y{i};
-%     Z = Tramos_Z{i};
-% 
-%     % Cálculo Numérico de Velocidades (dx/dt, dy/dt, dz/dt)
-%     Vx = gradient(X, dt);
-%     Vy = gradient(Y, dt);
-%     Vz = gradient(Z, dt);
-% 
-%     % Cálculo Numérico de Aceleraciones (dv/dt)
-%     Ax = gradient(Vx, dt);
-%     Ay = gradient(Vy, dt);
-%     Az = gradient(Vz, dt);
-% 
-%     % --- CREACIÓN DE LA FIGURA ---
-%     fig1 = figure('Color', 'w', 'Name', ['Posicion - ' Nombres{i}]);
-%     plot(t, [X Y Z], 'LineWidth', 1.5);
-%     title(['Posición Cartesiana - ' Nombres{i}]);
-%     ylabel('Posición [m]'); xlabel('Tiempo [s]');
-%     lgdX = legend('X', 'Y', 'Z', 'Location', 'eastoutside'); lgdX.ItemHitFcn = @toggleSignal;
-%     grid on; grid minor;
-% 
-%     % nombre_pos = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Posicion.png', i));
-%     % exportgraphics(fig1, nombre_pos, 'Resolution', 300);
-% 
-%     % Gráfico de Velocidad
-%     fig2 = figure('Color', 'w', 'Name', ['Velocidad - ' Nombres{i}]);
-%     plot(t, [Vx Vy Vz], 'LineWidth', 1.5);
-%     title(['Velocidad Cartesiana - ' Nombres{i}]);
-%     ylabel('Velocidad [m/s]'); xlabel('Tiempo [s]');
-%     lgdV = legend('V_x', 'V_y', 'V_z', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
-%     grid on; grid minor;
-% 
-%     % nombre_vel = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Velocidad.png', i));
-%     % exportgraphics(fig2, nombre_vel, 'Resolution', 300);
-% 
-%     % Gráfico de Aceleración
-%     fig3 = figure('Color', 'w', 'Name', ['Aceleración - ' Nombres{i}]);
-%     plot(t, [Ax Ay Az], 'LineWidth', 1.5);
-%     title(['Aceleración Cartesiana - ' Nombres{i}]);
-%     ylabel('Acel. [m/s^2]'); xlabel('Tiempo [s]');
-%     lgdA = legend('A_x', 'A_y', 'A_z', 'Location', 'eastoutside'); lgdA.ItemHitFcn = @toggleSignal;
-%     grid on; grid minor;
-% 
-%     % nombre_acc = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Aceleracion.png', i));
-%     % exportgraphics(fig3, nombre_acc, 'Resolution', 300);
-% end
-% 
-% disp('Los 12 gráficos han sido guardados en la carpeta "Graficos_Cinematica".');
-% 
-% %% Análisis Cinemático en el Espacio Articular (Motores)
-% 
-% % 1. Definir el tiempo físico total
-% cant_tramos = 4;
-% tiempo_total = cant_tramos*tiempo_por_tramo; 
-% t_total = linspace(0, tiempo_total, Total_Pasos);
-% dt_total = t_total(2) - t_total(1);
-% 
-% % 2. Inicializar matrices para Velocidad y Aceleración Articular
-% V_art = zeros(Total_Pasos, 6);
-% A_art = zeros(Total_Pasos, 6);
-% 
-% % 3. Cálculo Numérico usando 'gradient' para cada una de las 6 articulaciones
-% 
-% carpeta_destino_Q = 'Graficos_Cinematica_Articular_IN';
-% if ~exist(carpeta_destino_Q, 'dir')
-%     mkdir(carpeta_destino_Q);
-% end
-% 
-% for j = 1:6
-%     V_art(:, j) = gradient(Q(:, j), dt_total);
-%     A_art(:, j) = gradient(V_art(:, j), dt_total);
-% end
-% 
-% nombres_ejes = {'q_1 (Base)', 'q_2 (Hombro)', 'q_3 (Codo)', 'q_4 (Muñeca 1)', 'q_5 (Muñeca 2)', 'q_6 (Muñeca 3)'};
-% 
-% % --- GRÁFICO 1: POSICIÓN ARTICULAR ---
-% fig_q = figure('Color', 'w', 'Name', 'Posición Articular');
-% % Multiplicamos por 180/pi si prefieres ver los ángulos en GRADOS (opcional)
-% plot(t_total, rad2deg(Q), 'LineWidth', 1.5); 
-% title('Evolución de la Posición Articular');
-% ylabel('Posición [deg]'); xlabel('Tiempo [s]');
-% lgdQ = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQ.ItemHitFcn = @toggleSignal;
-% grid on; grid minor;
-% 
-% % Guardar imagen
-% % nombre_q = fullfile(carpeta_destino_Q, 'Articular_1_Posicion.png');
-% % exportgraphics(fig_q, nombre_q, 'Resolution', 300);
-% 
-% % --- GRÁFICO 2: VELOCIDAD ARTICULAR ---
-% fig_vq = figure('Color', 'w', 'Name', 'Velocidad Articular');
-% plot(t_total, rad2deg(V_art), 'LineWidth', 1.5);
-% title('Evolución de la Velocidad Articular');
-% ylabel('Velocidad [deg/s]'); xlabel('Tiempo [s]');
-% lgdQd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQd.ItemHitFcn = @toggleSignal;
-% grid on; grid minor;
-% 
-% % nombre_vq = fullfile(carpeta_destino_Q, 'Articular_2_Velocidad.png');
-% % exportgraphics(fig_vq, nombre_vq, 'Resolution', 300);
-% 
-% % --- GRÁFICO 3: ACELERACIÓN ARTICULAR ---
-% fig_aq = figure('Color', 'w', 'Name', 'Aceleración Articular');
-% plot(t_total, rad2deg(A_art), 'LineWidth', 1.5);
-% title('Evolución de la Aceleración Articular');
-% ylabel('Aceleración [deg/s^2]'); xlabel('Tiempo [s]');
-% lgdQdd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQdd.ItemHitFcn = @toggleSignal;
-% grid on; grid minor;
-% 
-% % Guardar imagen
-% % nombre_aq = fullfile(carpeta_destino_Q, 'Articular_3_Aceleracion.png');
-% % exportgraphics(fig_aq, nombre_aq, 'Resolution', 300);
+carpeta_destino_C = 'Graficos_Cinematica_Cartesiana_IN';
+if ~exist(carpeta_destino_C, 'dir')
+    mkdir(carpeta_destino_C);
+end
 
-disp('Los 3 gráficos articulares han sido guardados.');
+for i = 1:4
+    % Extraer posiciones del tramo actual
+    X = Tramos_X{i};
+    Y = Tramos_Y{i};
+    Z = Tramos_Z{i};
 
+    % Cálculo Numérico de Velocidades (dx/dt, dy/dt, dz/dt)
+    Vx = gradient(X, dt);
+    Vy = gradient(Y, dt);
+    Vz = gradient(Z, dt);
+
+    % Cálculo Numérico de Aceleraciones (dv/dt)
+    Ax = gradient(Vx, dt);
+    Ay = gradient(Vy, dt);
+    Az = gradient(Vz, dt);
+
+    % --- CREACIÓN DE LA FIGURA ---
+    fig1 = figure('Color', 'w', 'Name', ['Posicion - ' Nombres{i}]);
+    plot(t, [X Y Z], 'LineWidth', 1.5);
+    title(['Posición Cartesiana - ' Nombres{i}]);
+    ylabel('Posición [m]'); xlabel('Tiempo [s]');
+    lgdX = legend('X', 'Y', 'Z', 'Location', 'eastoutside'); lgdX.ItemHitFcn = @toggleSignal;
+    grid on; grid minor;
+
+    
+
+    % Gráfico de Velocidad
+    fig2 = figure('Color', 'w', 'Name', ['Velocidad - ' Nombres{i}]);
+    plot(t, [Vx Vy Vz], 'LineWidth', 1.5);
+    title(['Velocidad Cartesiana - ' Nombres{i}]);
+    ylabel('Velocidad [m/s]'); xlabel('Tiempo [s]');
+    lgdV = legend('V_x', 'V_y', 'V_z', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
+    grid on; grid minor;
+
+    
+
+    % Gráfico de Aceleración
+    fig3 = figure('Color', 'w', 'Name', ['Aceleración - ' Nombres{i}]);
+    plot(t, [Ax Ay Az], 'LineWidth', 1.5);
+    title(['Aceleración Cartesiana - ' Nombres{i}]);
+    ylabel('Acel. [m/s^2]'); xlabel('Tiempo [s]');
+    lgdA = legend('A_x', 'A_y', 'A_z', 'Location', 'eastoutside'); lgdA.ItemHitFcn = @toggleSignal;
+    grid on; grid minor;
+    
+    if guardar_cartesiano
+        nombre_pos = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Posicion.png', i));
+        exportgraphics(fig1, nombre_pos, 'Resolution', 300);
+
+        nombre_vel = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Velocidad.png', i));
+        exportgraphics(fig2, nombre_vel, 'Resolution', 300);
+
+        nombre_acc = fullfile(carpeta_destino_C, sprintf('Tramo_%d_Aceleracion.png', i));
+        exportgraphics(fig3, nombre_acc, 'Resolution', 300);
+    end
+end
+
+if guardar_cartesiano
+    disp('Los 12 gráficos han sido guardados en la carpeta "Graficos_Cinematica".');
+end
+
+%% Análisis Cinemático en el Espacio Articular (Motores)
+
+% 1. Definir el tiempo físico
+cant_tramos = 4;
+tiempo_soldadura = cant_tramos * tiempo_por_tramo; 
+
+% Construimos el vector de tiempo real para coincidir con los 3 bloques de Q
+t_app = linspace(0, tiempo_homing, pasos_homing)';
+t_mid = linspace(tiempo_homing, tiempo_homing + tiempo_soldadura, size(Q_middle, 1))';
+t_ret = linspace(tiempo_homing + tiempo_soldadura, tiempo_homing + tiempo_soldadura + tiempo_homing, pasos_homing)';
+
+t_total = [t_app; t_mid(2:end); t_ret(2:end)];
+Total_Pasos_Articulares = length(t_total);
+
+% 2. Inicializar matrices para Velocidad y Aceleración Articular
+V_art = zeros(Total_Pasos_Articulares, 6);
+A_art = zeros(Total_Pasos_Articulares, 6);
+
+% 3. Cálculo Numérico usando 'gradient' (soporta dt variable para las distintas zonas)
+for j = 1:6
+    V_art(:, j) = gradient(Q(:, j), t_total);
+    A_art(:, j) = gradient(V_art(:, j), t_total);
+end
+
+nombres_ejes = {'q_1 (Base)', 'q_2 (Hombro)', 'q_3 (Codo)', 'q_4 (Muñeca 1)', 'q_5 (Muñeca 2)', 'q_6 (Muñeca 3)'};
+
+% --- GRÁFICO 1: POSICIÓN ARTICULAR ---
+fig_q = figure('Color', 'w', 'Name', 'Posición Articular');
+
+plot(t_total, rad2deg(Q), 'LineWidth', 1.5); 
+title('Evolución de la Posición Articular');
+ylabel('Posición [deg]'); xlabel('Tiempo [s]');
+lgdQ = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQ.ItemHitFcn = @toggleSignal;
+grid on; grid minor;
+
+
+% --- GRÁFICO 2: VELOCIDAD ARTICULAR ---
+fig_vq = figure('Color', 'w', 'Name', 'Velocidad Articular');
+plot(t_total, rad2deg(V_art), 'LineWidth', 1.5);
+title('Evolución de la Velocidad Articular');
+ylabel('Velocidad [deg/s]'); xlabel('Tiempo [s]');
+lgdQd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQd.ItemHitFcn = @toggleSignal;
+grid on; grid minor;
+
+
+
+% --- GRÁFICO 3: ACELERACIÓN ARTICULAR ---
+fig_aq = figure('Color', 'w', 'Name', 'Aceleración Articular');
+plot(t_total, rad2deg(A_art), 'LineWidth', 1.5);
+title('Evolución de la Aceleración Articular');
+ylabel('Aceleración [deg/s^2]'); xlabel('Tiempo [s]');
+lgdQdd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQdd.ItemHitFcn = @toggleSignal;
+grid on; grid minor;
+
+
+% --- GRÁFICO 4: DETERMINANTE DEL JACOBIANO ---
+disp('Calculando Determinante del Jacobiano...');
+det_J = zeros(Total_Pasos_Articulares, 1);
+for j = 1:Total_Pasos_Articulares
+    J = Robot.jacob0(Q(j,:));
+    det_J(j) = det(J);
+end
+
+fig_m = figure('Color', 'w', 'Name', 'Determinante del Jacobiano');
+plot(t_total, det_J, 'LineWidth', 1.5, 'Color', '#D95319');
+title('Determinante del Jacobiano Geométrico (det(J))');
+ylabel('det(J)'); xlabel('Tiempo [s]');
+grid on; grid minor;
+
+
+carpeta_destino_Q = 'Graficos_Cinematica_Articular_IN';
+if ~exist(carpeta_destino_Q, 'dir')
+    mkdir(carpeta_destino_Q);
+end
+
+if guardar_articular
+    nombre_q = fullfile(carpeta_destino_Q, 'Articular_1_Posicion.png');
+    exportgraphics(fig_q, nombre_q, 'Resolution', 300);
+
+    nombre_vq = fullfile(carpeta_destino_Q, 'Articular_2_Velocidad.png');
+    exportgraphics(fig_vq, nombre_vq, 'Resolution', 300);
+    
+    nombre_aq = fullfile(carpeta_destino_Q, 'Articular_3_Aceleracion.png');
+    exportgraphics(fig_aq, nombre_aq, 'Resolution', 300);
+
+    disp('Los 3 gráficos articulares han sido guardados.');
+end
+
+if guardar_jacobiano
+    nombre_m = fullfile(carpeta_destino_Q, 'Articular_4_Maniobrabilidad.png');
+    exportgraphics(fig_m, nombre_m, 'Resolution', 300);
+    disp('Gráfico de Maniobrabilidad guardado.');
+end
+
+disp('Presione [ENTER] para continuar con la simulación.');
 pause()
 
 
@@ -288,7 +349,8 @@ y1lim = -2; y2lim = 2;
 z1lim = -0.1; z2lim = 2;
 WS = [x1lim x2lim y1lim y2lim z1lim z2lim];
 
-figure('Color','w', 'Name', 'Simulación de Soldadura Interna'); grid on; 
+figure('Color', 'w', 'Name', 'Simulación de Soldadura Interna', ...
+    'WindowStyle', 'normal', 'Units', 'pixels', 'Position', [100 100 1920 1080]); grid on; 
 hold on;
 
 % 1. Dibujar el cilindro de la pieza
@@ -301,19 +363,40 @@ surf(Xc, Yc, Zc, 'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'none', 'FaceAlpha', 0
 plot3(Trayectoria_X, Trayectoria_Y, Trayectoria_Z, 'r-', 'LineWidth', 1);
 plot3(Trayectoria_X(1), Trayectoria_Y(1), Trayectoria_Z(1), 'g.', 'MarkerSize', 20); % Inicio en verde
 
-% 3. Graficar la base del robot estática para congelar los ejes y aplicar axis equal
-Robot.plot(zeros(1, Robot.n), 'workspace', WS, 'notiles', 'scale', 0.4, 'jointdiam', 0.8);
+% 3. Configurar vista y ejes (reemplaza al Robot.plot estático previo)
 axis equal;
 view(135, 25);
 
 % 4. Iniciar la animación del brazo robótico recorriendo el cordón
+% Una sola llamada a Robot.plot: con hold on, RTB no llama cla y conserva
+% el cilindro, la trayectoria y los colores personalizados.
 disp('Animando trayectoria en configuración Front-Elbow Up...');
-grabar = false;
 
-if grabar
-    Robot.plot(Q, 'workspace', WS, 'notiles', 'scale', 0.4, 'jointdiam', 0.8, 'fps', 60, 'movie', 'Simulacion_Soldadura_Outside.mp4'); % , 'movie', 'Simulacion_Soldadura.mp4'
+if guardar_video
+    Robot.plot(...
+        Q_animacion, ...
+        'workspace', WS, ...
+        'notiles', ...
+        'scale', 0.75, ...
+        'jointdiam', 1.5, ...
+        'jointlen', 1, ...
+        'linkcolor', [.2 .2 .2], ...
+        'jointcolor', [1 .4 0], ...
+        'fps', 60, ...
+        'movie', 'Simulacion_Soldadura_IN.mp4'...
+    );
 else
-    Robot.plot(Q, 'workspace', WS, 'notiles', 'scale', 0.4, 'jointdiam', 0.8, 'fps', 60);
+    Robot.plot(...
+        Q_animacion, ...
+        'workspace', WS, ...
+        'notiles', ...
+        'scale', 0.75, ...
+        'jointdiam', 1.5, ...
+        'jointlen', 1, ...
+        'linkcolor', [.2 .2 .2], ...
+        'jointcolor', [1 .4 0], ...
+        'fps', 60 ...
+    );
 end
 
 disp('End of Animation')
