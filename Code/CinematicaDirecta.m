@@ -31,12 +31,12 @@ for i = 1:N
 
         theta = q(i, k) + offset(k);
         
-        % Parámetros del eslabón k
+        % saco los parametros DH del eslabon
         d_k = R.links(k).d;
         a_k = R.links(k).a;
         alpha_k = R.links(k).alpha;
         
-        % Matriz de transformación Denavit-Hartenberg estándar para el eslabón k
+        % armo la matriz homogenea clasica de DH
         A_k = [ ...
             cos(theta), -sin(theta)*cos(alpha_k),  sin(theta)*sin(alpha_k), a_k*cos(theta);
             sin(theta),  cos(theta)*cos(alpha_k), -cos(theta)*sin(alpha_k), a_k*sin(theta);
@@ -49,7 +49,8 @@ for i = 1:N
     
     T_total = R.base * T * R.tool;
     
-    % Posición y orientación (Euler RPY en convención 'zyx')
+    % guardo posicion y angulos de euler
+
     XSol(i, 1:3) = T_total.t';
     XSol(i, 4:6) = T_total.tr2rpy('zyx');
 end

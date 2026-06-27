@@ -9,59 +9,59 @@ arguments (Input)
     guardar_video
 end
 
-%% Path Completo: Posición y Orientación (Soldadura con Weaving e Inclinación)
+%% recorrido cartesiano con weaving e inclinacion
 
-% Parámetros Especiales
-R = 1.2;                    % Radio del cilindro [m]
-A = 0.01;                   % Amplitud del weaving [m]
-A_ang = A / R;              % Amplitud en radianes
-k = 20 * 2 * pi;            % Frecuencia de oscilación
-alpha_tilt = deg2rad(15);   % Ángulo de avance (15°)
+% parametros del cilindro y la soldadura
+R = 1.2;                    % radio del cilindro [m]
+A = 0.01;                   % amplitud del weaving [m]
+A_ang = A / R;              % paso a rads
+k = 20 * 2 * pi;            % frecuencia del weaving
+alpha_tilt = deg2rad(15);   % angulo de empuje (15°)
 
-% Puntos base
+% limites geometricos
 z1 = 0.4; z2 = 1.0;
 theta1 = -pi/6; theta2 = pi/6;
 pasos = 1001;
 
-% Ley Temporal
+% vector de tiempo interpolado
 [u, ud, udd] = lspb(0, 1, pasos); 
 
-%% Generación de los 4 tramos (Posición y Vector de Avance)
+%% armado de los 4 tramos (posicion y vector de avance)
 
-% --- TRAMO 1: Subida ---
+% tramo 1: subida
 theta_T1 = theta1 + A_ang .* sin(k .* u);
 Z_T1     = z1 + (z2 - z1) .* u;
 X_T1     = R .* cos(theta_T1);
 Y_T1     = R .* sin(theta_T1);
-% Dirección macro de avance: hacia arriba (+Z)
+% avanza hacia arriba (+Z)
 t_adv_T1 = repmat([0, 0, 1], pasos, 1); 
 
-% --- TRAMO 2: Arco superior ---
+% tramo 2: arco de arriba
 theta_T2 = theta1 + (theta2 - theta1) .* u;
 Z_T2     = z2 + A .* sin(k .* u);
 X_T2     = R .* cos(theta_T2);
 Y_T2     = R .* sin(theta_T2);
-% Dirección macro de avance: tangencial horaria [-sin(th), cos(th), 0]
+% avanza tangencial horario
 t_adv_T2 = [-sin(theta_T2), cos(theta_T2), zeros(pasos, 1)];
 
-% --- TRAMO 3: Bajada ---
+% tramo 3: bajada
 theta_T3 = theta2 + A_ang .* sin(k .* u);
 Z_T3     = z2 + (z1 - z2) .* u;
 X_T3     = R .* cos(theta_T3);
 Y_T3     = R .* sin(theta_T3);
-% Dirección macro de avance: hacia abajo (-Z)
+% avanza hacia abajo (-Z)
 t_adv_T3 = repmat([0, 0, -1], pasos, 1);
 
-% --- TRAMO 4: Arco inferior ---
+% tramo 4: arco de abajo
 theta_T4 = theta2 + (theta1 - theta2) .* u;
 Z_T4     = z1 + A .* sin(k .* u);
 X_T4     = R .* cos(theta_T4);
 Y_T4     = R .* sin(theta_T4);
-% Dirección macro de avance: tangencial antihoraria
+% avanza tangencial antihorario
 t_adv_T4 = [sin(theta_T4), -cos(theta_T4), zeros(pasos, 1)];
 
 
-%% Concatenación de datos espaciales
+%% juntar todos los tramos
 Trayectoria_X = [X_T1; X_T2; X_T3; X_T4];
 Trayectoria_Y = [Y_T1; Y_T2; Y_T3; Y_T4];
 Trayectoria_Z = [Z_T1; Z_T2; Z_T3; Z_T4];
@@ -70,16 +70,16 @@ Trayectoria_Adv   = [t_adv_T1; t_adv_T2; t_adv_T3; t_adv_T4];
 
 Total_Pasos = length(Trayectoria_X);
 
-%% ZONA DE EMPALME / BLENDING
-% Suavizamos SOLO las transiciones entre tramos, preservando el weaving.
+%% blending de las esquinas
+% redondeo solo las transiciones para no achatar el weaving
 
 porcentaje_empalme = 0.02;
 ancho_empalme = round(pasos * porcentaje_empalme);
 
-% Índices donde un tramo se une con el siguiente
+% indices donde se pegan los tramos
 transiciones = [pasos, 2*pasos, 3*pasos];
 
-% Construir máscara de peso: ~1 en la transición, ~0 lejos de ella
+% armo una mascara gaussiana para el blending (1 cerca de la esquina, 0 lejos)
 peso = zeros(Total_Pasos, 1);
 for idx = transiciones
     rango = max(1, idx - ancho_empalme) : min(Total_Pasos, idx + ancho_empalme);
@@ -87,7 +87,7 @@ for idx = transiciones
     peso(rango) = max(peso(rango), w');
 end
 
-% 1. Suavizar Geometría solo en las transiciones
+% suavizo posicion (redondea el vertice sin tocar el resto)
 Suave_X = smoothdata(Trayectoria_X, 'gaussian', 2 * ancho_empalme);
 Suave_Y = smoothdata(Trayectoria_Y, 'gaussian', 2 * ancho_empalme);
 Suave_Z = smoothdata(Trayectoria_Z, 'gaussian', 2 * ancho_empalme);
@@ -96,112 +96,111 @@ Trayectoria_X = (1 - peso) .* Trayectoria_X + peso .* Suave_X;
 Trayectoria_Y = (1 - peso) .* Trayectoria_Y + peso .* Suave_Y;
 Trayectoria_Z = (1 - peso) .* Trayectoria_Z + peso .* Suave_Z;
 
-% 2. Suavizar Orientación solo en las transiciones
+% suavizo el vector de avance
 Suave_Adv = smoothdata(Trayectoria_Adv, 1, 'gaussian', 2 * ancho_empalme);
 Trayectoria_Adv = (1 - peso) .* Trayectoria_Adv + peso .* Suave_Adv;
 
-% Se vuelven a normalizar los vectores para que las matemáticas de la rotación no fallen.
+% normalizo los vectores para que la matriz de rotacion no se rompa
 Trayectoria_Adv = Trayectoria_Adv ./ vecnorm(Trayectoria_Adv, 2, 2);
 
-%% Cálculo de la Orientación Dinámica [Push Angle]
+%% saco el angulo de ataque y orientacion de la antorcha
 CPosition = zeros(Total_Pasos, 6); 
 
 for i = 1:Total_Pasos
     th = Trayectoria_Theta(i);
     t_adv = Trayectoria_Adv(i, :);
     
-    % a) Vector de Aproximación (Z de la antorcha) = Normal Interior
+    % eje z de la antorcha apuntando al centro del cilindro (desde adentro, hacia afuera)
     a_vec = [cos(th); sin(th); 0];
     
-    % b) Construir Base de Rotación Perpendicular Exacta [n, o, a]
-    % Usar el eje Z del mundo para asegurar ortogonalidad en el plano coordenado
+    % armo base ortonormal [n, o, a] usando z global para no perder ortogonalidad
     z_mundo = [0; 0; 1];
     n_vec = cross(z_mundo, a_vec); 
     n_vec = n_vec / norm(n_vec);
     o_vec = cross(a_vec, n_vec); 
     
-    R_perp = [n_vec, o_vec, a_vec]; % Matriz perpendicular perfecta
+    R_perp = [n_vec, o_vec, a_vec]; 
     
-    % c) Aplicar la inclinación de 15° en la dirección de avance
-    % El eje de giro óptimo es perpendicular a la normal (a) y al avance (t_adv)
+    % inclino la antorcha 15 grados en la direccion que avanza
     eje_giro = cross(a_vec, t_adv');
     
     if norm(eje_giro) > 1e-6
         eje_giro = eje_giro / norm(eje_giro);
-        % angvec2r genera la matriz de rotación pura a partir de un eje y un ángulo
         R_tilt = angvec2r(alpha_tilt, eje_giro); 
         R_final = R_tilt * R_perp;
     else
         R_final = R_perp; 
     end
     
-    % d) Convertir la matriz 3x3 a ángulos de Euler Roll-Pitch-Yaw
-    rpy = tr2rpy(R_final); % Devuelve [roll, pitch, yaw] en radianes
+    % paso a roll-pitch-yaw
+    rpy = tr2rpy(R_final); 
     
-    % e) Guardar en el formato (6 x K)
+    % guardo todo en la matriz
     CPosition(i, :) = [Trayectoria_X(i); Trayectoria_Y(i); Trayectoria_Z(i); rpy'];
 end
 
 %% Cinemática Inversa con Semilla Óptima (Front - Elbow Up)
 S01_my_robot;
 
-% q1 apunta al inicio (theta1), q2 inclina hombro adelante, q3 levanta codo
+%% cinematica inversa (arrancando desde homing)
+S01_my_robot;
+
+% semilla inicial (Front - Elbow Up)
 q_semilla_inicial = [theta1, pi/4, -pi/4, 0, pi/2, 0]; 
 
 [Q_middle] = CinematicaInversa(Robot, CPosition, q_semilla_inicial);
 
-% --- AGREGADO: Trayectorias de Homing (Aproximación y Retirada) ---
-% Se elige q5 = pi/2 para que en el viaje hacia la zona de soldadura (donde q5 ~ pi/2)
-% no cruce por q5 = 0 (evitando pasar por la singularidad de muñeca).
-q_home = [0, 0, 0, 0, pi/2, 0]; % Posición de Homing (Ready / L-Shape)
-pasos_homing = 50; % Cantidad de frames para el viaje desde/hacia homing
-tiempo_homing = 5; % Segundos físicos que tarda en acercarse/alejarse
+% homing para acercarse y alejarse sin chocar
+% q5=pi/2 evita cruzar por la singularidad de muñeca (q5=0)
+q_home = [0, 0, 0, 0, pi/2, 0]; 
+pasos_homing = 50; 
+tiempo_homing = 5; % segs
 
-% jtraj calcula una trayectoria suave en el espacio articular
+% interpolacion suave para homing
 Q_approach = jtraj(q_home, Q_middle(1,:), pasos_homing);
 Q_retreat  = jtraj(Q_middle(end,:), q_home, pasos_homing);
 
-% Concatenamos las secuencias sin duplicar el punto de conexión
+% pego las secuencias (quito el inicio para no duplicar el frame)
 Q = [Q_approach; Q_middle(2:end, :); Q_retreat(2:end, :)];
 
 fprintf('Matriz Target_Poses (%dx6) generada con éxito.\n', size(Q, 1));
 
-%% Análisis Cinemático en el Espacio Cartesiano - Por Tramo
+%% analisis cartesiano por tramo
 
-% 1. Definir el tiempo físico de la trayectoria
+% tiempos
 tiempo_por_tramo = 60; 
 t = linspace(0, tiempo_por_tramo, pasos);
 dt = t(2) - t(1); 
 
 % 2. Agrupar las coordenadas
+% agrupo coordenadas
 Tramos_X = {X_T1, X_T2, X_T3, X_T4};
 Tramos_Y = {Y_T1, Y_T2, Y_T3, Y_T4};
 Tramos_Z = {Z_T1, Z_T2, Z_T3, Z_T4};
 Nombres = {'Tramo 1 (Subida)', 'Tramo 2 (Arco Sup)', 'Tramo 3 (Bajada)', 'Tramo 4 (Arco Inf)'};
 
-% 3. Bucle de cálculo y graficación
+% calculo y graficos
 carpeta_destino_C = 'Graficos_Cinematica_Cartesiana_IN';
 if ~exist(carpeta_destino_C, 'dir')
     mkdir(carpeta_destino_C);
 end
 
 for i = 1:4
-    % Extraer posiciones del tramo actual
     X = Tramos_X{i};
     Y = Tramos_Y{i};
     Z = Tramos_Z{i};
 
-    % Cálculo Numérico de Velocidades (dx/dt, dy/dt, dz/dt)
+    % derivamos posicion para sacar velocidad (dx/dt, dy/dt, dz/dt)
     Vx = gradient(X, dt);
     Vy = gradient(Y, dt);
     Vz = gradient(Z, dt);
 
-    % Cálculo Numérico de Aceleraciones (dv/dt)
+    % derivamos velocidad para sacar aceleracion (dv/dt)
     Ax = gradient(Vx, dt);
     Ay = gradient(Vy, dt);
     Az = gradient(Vz, dt);
 
-    % --- CREACIÓN DE LA FIGURA ---
+    % plot de posicion
     fig1 = figure('Color', 'w', 'Name', ['Posicion - ' Nombres{i}]);
     plot(t, [X Y Z], 'LineWidth', 1.5);
     title(['Posición Cartesiana - ' Nombres{i}]);
@@ -211,7 +210,7 @@ for i = 1:4
 
     
 
-    % Gráfico de Velocidad
+% plot de velocidad
     fig2 = figure('Color', 'w', 'Name', ['Velocidad - ' Nombres{i}]);
     plot(t, [Vx Vy Vz], 'LineWidth', 1.5);
     title(['Velocidad Cartesiana - ' Nombres{i}]);
@@ -219,9 +218,7 @@ for i = 1:4
     lgdV = legend('V_x', 'V_y', 'V_z', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
     grid on; grid minor;
 
-    
-
-    % Gráfico de Aceleración
+    % plot de aceleracion
     fig3 = figure('Color', 'w', 'Name', ['Aceleración - ' Nombres{i}]);
     plot(t, [Ax Ay Az], 'LineWidth', 1.5);
     title(['Aceleración Cartesiana - ' Nombres{i}]);
@@ -245,13 +242,12 @@ if guardar_cartesiano
     disp('Los 12 gráficos han sido guardados en la carpeta "Graficos_Cinematica".');
 end
 
-%% Análisis Cinemático en el Espacio Articular (Motores)
+%% analisis en el espacio articular (motores)
 
-% 1. Definir el tiempo físico
+% armo vector de tiempo para que coincida con los 3 bloques de la trayectoria
 cant_tramos = 4;
 tiempo_soldadura = cant_tramos * tiempo_por_tramo; 
 
-% Construimos el vector de tiempo real para coincidir con los 3 bloques de Q
 t_app = linspace(0, tiempo_homing, pasos_homing)';
 t_mid = linspace(tiempo_homing, tiempo_homing + tiempo_soldadura, size(Q_middle, 1))';
 t_ret = linspace(tiempo_homing + tiempo_soldadura, tiempo_homing + tiempo_soldadura + tiempo_homing, pasos_homing)';
@@ -259,11 +255,10 @@ t_ret = linspace(tiempo_homing + tiempo_soldadura, tiempo_homing + tiempo_soldad
 t_total = [t_app; t_mid(2:end); t_ret(2:end)];
 Total_Pasos_Articulares = length(t_total);
 
-% 2. Inicializar matrices para Velocidad y Aceleración Articular
+% derivo la posicion articular con gradient (soporta dt variable para las distintas zonas)
 V_art = zeros(Total_Pasos_Articulares, 6);
 A_art = zeros(Total_Pasos_Articulares, 6);
 
-% 3. Cálculo Numérico usando 'gradient' (soporta dt variable para las distintas zonas)
 for j = 1:6
     V_art(:, j) = gradient(Q(:, j), t_total);
     A_art(:, j) = gradient(V_art(:, j), t_total);
@@ -271,7 +266,7 @@ end
 
 nombres_ejes = {'q_1 (Base)', 'q_2 (Hombro)', 'q_3 (Codo)', 'q_4 (Muñeca 1)', 'q_5 (Muñeca 2)', 'q_6 (Muñeca 3)'};
 
-% --- GRÁFICO 1: POSICIÓN ARTICULAR ---
+% plot de posicion articular
 fig_q = figure('Color', 'w', 'Name', 'Posición Articular');
 
 plot(t_total, rad2deg(Q), 'LineWidth', 1.5); 
@@ -281,7 +276,7 @@ lgdQ = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQ.ItemHitFcn = @toggl
 grid on; grid minor;
 
 
-% --- GRÁFICO 2: VELOCIDAD ARTICULAR ---
+% plot de velocidad articular
 fig_vq = figure('Color', 'w', 'Name', 'Velocidad Articular');
 plot(t_total, rad2deg(V_art), 'LineWidth', 1.5);
 title('Evolución de la Velocidad Articular');
@@ -291,7 +286,7 @@ grid on; grid minor;
 
 
 
-% --- GRÁFICO 3: ACELERACIÓN ARTICULAR ---
+% plot de aceleracion articular
 fig_aq = figure('Color', 'w', 'Name', 'Aceleración Articular');
 plot(t_total, rad2deg(A_art), 'LineWidth', 1.5);
 title('Evolución de la Aceleración Articular');
@@ -300,7 +295,7 @@ lgdQdd = legend(nombres_ejes, 'Location', 'eastoutside'); lgdQdd.ItemHitFcn = @t
 grid on; grid minor;
 
 
-% --- GRÁFICO 4: DETERMINANTE DEL JACOBIANO ---
+% plot del determinante del jacobiano
 disp('Calculando Determinante del Jacobiano...');
 det_J = zeros(Total_Pasos_Articulares, 1);
 for j = 1:Total_Pasos_Articulares
@@ -343,7 +338,7 @@ disp('Presione [ENTER] para continuar con la simulación.');
 pause()
 
 
-%% Configuración del Gráfico de Simulación
+%% animacion realista del robot
 x1lim = -2; x2lim = 2;
 y1lim = -2; y2lim = 2;
 z1lim = -0.1; z2lim = 2;
@@ -353,23 +348,20 @@ figure('Color', 'w', 'Name', 'Simulación de Soldadura Interna', ...
     'WindowStyle', 'normal', 'Units', 'pixels', 'Position', [100 100 1920 1080]); grid on; 
 hold on;
 
-% 1. Dibujar el cilindro de la pieza
+% dibujo la pieza
 [Xc, Yc, Zc] = cylinder(R, 50);
 Zc = Zc * (z2 + 0.2); 
 surf(Xc, Yc, Zc, 'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'none', 'FaceAlpha', 0.4);
 
-% 2. Trayectoria cartesiana directamente sobre la pieza
-% Esto actúa como el cordón de soldadura ya trazado perfectamente en el espacio
+% trazo el cordon en rojo y un punto verde donde arranca
 plot3(Trayectoria_X, Trayectoria_Y, Trayectoria_Z, 'r-', 'LineWidth', 1);
-plot3(Trayectoria_X(1), Trayectoria_Y(1), Trayectoria_Z(1), 'g.', 'MarkerSize', 20); % Inicio en verde
+plot3(Trayectoria_X(1), Trayectoria_Y(1), Trayectoria_Z(1), 'g.', 'MarkerSize', 20); 
 
-% 3. Configurar vista y ejes (reemplaza al Robot.plot estático previo)
+% clavo los ejes y roto la camara para que se vea bien el interior
 axis equal;
 view(135, 25);
 
-% 4. Iniciar la animación del brazo robótico recorriendo el cordón
-% Una sola llamada a Robot.plot: con hold on, RTB no llama cla y conserva
-% el cilindro, la trayectoria y los colores personalizados.
+% play a la animacion (no hago cla asi no se borra la pieza)
 disp('Animando trayectoria en configuración Front-Elbow Up...');
 
 if guardar_video

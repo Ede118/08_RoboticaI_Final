@@ -4,10 +4,9 @@
 clc; close all;
 
 
-%% Definicion de los parametros del robot
+%% parametros del robot
 
-% Esta tiene notacion "mas comoda"
-% Es la que esta en el informe
+% uso esta notacion de denavit-hartenberg (es la del informe)
 DH = [
     0       0.450   0.075    pi/2   0;   % Joint 1
     0       0.000   0.640    0      0;   % Joint 2
@@ -17,8 +16,8 @@ DH = [
     0       0.075   0.000    0      0];  % Joint 6
 % %  theta      d       a     alpha  sigma
 
-% Esta matriz me permite ver mejor la ETIQUETA DEL
-% EJE q4. Tiene utilidad meramente estetica.
+% esta otra me dejaba ver mejor la etiqueta del eje q4,
+% pero es solo para dibujar lindo el plot de matlab
 % DH = [
 %     0       0.450   0.075    pi/2       0;   % Joint 1
 %     0       0.000   0.640    0          0;   % Joint 2
@@ -50,7 +49,7 @@ base = transl(0,0,0);
 d_tool = 0; 
 tool = transl(0,0,d_tool);
 
-%% Definicion del robot
+%% armo el objeto del robot (SerialLink)
 
 Robot = SerialLink(DH);
 Robot.name = name;
@@ -59,7 +58,7 @@ Robot.offset = offset;
 Robot.base = base;
 Robot.tool = tool;
 
-%% Limites de WorkSpace
+%% limites del plot (workspace)
 x1lim = -2;
 x2lim = 2;
 y1lim = -2;
