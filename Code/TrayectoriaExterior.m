@@ -192,6 +192,9 @@ for i = 1:4
     Vx = gradient(X, dt);
     Vy = gradient(Y, dt);
     Vz = gradient(Z, dt);
+    
+    % calculamos el módulo de la velocidad
+    V_mod = sqrt(Vx.^2 + Vy.^2 + Vz.^2);
 
     % derivamos velocidad para sacar aceleracion (dv/dt)
     Ax = gradient(Vx, dt);
@@ -208,10 +211,10 @@ for i = 1:4
 
     % Gráfico de Velocidad
     fig2 = figure('Color', 'w', 'Name', ['Velocidad - ' Nombres{i}]);
-    plot(t, [Vx Vy Vz], 'LineWidth', 1.5);
+    plot(t, [Vx Vy Vz V_mod], 'LineWidth', 1.5);
     title(['Velocidad Cartesiana - ' Nombres{i}]);
     ylabel('Velocidad [m/s]'); xlabel('Tiempo [s]');
-    lgdV = legend('V_x', 'V_y', 'V_z', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
+    lgdV = legend('V_x', 'V_y', 'V_z', '|V|', 'Location', 'eastoutside'); lgdV.ItemHitFcn = @toggleSignal;
     grid on; grid minor;
 
     % Gráfico de Aceleración
